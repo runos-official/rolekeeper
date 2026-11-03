@@ -1,0 +1,23 @@
+{
+  "v": 1,
+  "floors": [
+    {
+      "env": "dev",
+      "pin": "c5cb4945494f8025",
+      "seq": 0,
+      "note": "an offline root pin, no handover yet. Test runs use throwaway roots and set their floor in the test (SetFloorForTest)."
+    },
+    {
+      "env": "dev",
+      "pin": "6341bdd2ff376f3d",
+      "seq": 0,
+      "note": "an offline root pin; the entry above names the root that came before it"
+    },
+    {
+      "env": "prod",
+      "pin": "4e834b3422724968",
+      "seq": 0,
+      "note": "an offline root pin"
+    }
+  ]
+}

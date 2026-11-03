@@ -1,0 +1,409 @@
+# The roid RBAC applier (rolekeeper) on one RunOS cluster, relay
+# transport.
+#
+# The applier never talks to roid. Conductor carries roid's signed bundle
+# into three ConfigMaps in this namespace (roid-rbac-bundle, roid-rbac-relay;
+# the applier writes roid-rbac-status). The applier reads them through the
+# Kubernetes API, verifies the bundle against the pinned key set, refuses
+# anything older than what it applied, and applies it over the same REST API
+# with server-side apply: the deny list first, then removals, then creates.
+# It prunes only objects labelled runos.com/roid-managed=true (and hand-made
+# bindings that name a runos: subject).
+#
+# There is no projected token with audience roid, no TokenReview, no roid
+# address, no CA bundle for roid and no egress rule to roid. The pod may
+# reach the API server and DNS, nothing else.
+#
+# The installer (conductor) fills these values.
+#   ${IMAGE}         ghcr.io/runos-official/rolekeeper:<version>@sha256:<digest>
+#   ${ACCOUNT}       the account that owns this cluster
+#   ${NS_SELECTOR}   label selector of the namespaces RunOS manages
+#   ${API_CIDR}      the API server endpoints (the kubernetes Endpoints, not the service IP)
+#   ${API_PORT}      their port
+# The ConfigMap roid-k8s-applier-trust (trust.json, public) is written by the
+# installer next to this file. It holds no roid CA.
+#
+# Install order: the namespaces below, then deny-policy.json (the deny
+# list, its admission policy and binding, list first), then the rest. The
+# installer writes the policy because Kubernetes lets only a writer who may
+# get every ConfigMap create a policy with a ConfigMap param, and the
+# applier may not; it keeps the list and repairs the policy in place.
+#
+# NEVER DELETE the deny policy or its binding, and never re-create them: on
+# kind v1.36.1 a re-created policy can keep an old copy of its list until
+# kube-apiserver restarts, so a person added to the list later is not cut.
+# Apply deny-policy.json again to update it in place (kubectl apply or a
+# server-side apply). If it is gone, see the Kubernetes access runbook: create
+# it, then restart kube-apiserver.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: roid-k8s-applier
+  labels:
+    app: roid-k8s-applier
+    pod-security.kubernetes.io/enforce: restricted
+---
+# The deny list ConfigMap lives in runos (compile.DenyNamespace).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: runos
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: roid-k8s-applier
+  namespace: roid-k8s-applier
+  labels:
+    app: roid-k8s-applier
+---
+# WHAT THE APPLIER MAY TOUCH: the kinds a bundle holds, and nothing else.
+# Bind and escalate on the five RunOS roles only: Kubernetes refuses a
+# binding to a role the writer does not hold unless it may bind that role,
+# and a ClusterRole with rules beyond the writer's own unless it may
+# escalate. Naming the five keeps the applier from binding cluster-admin.
+# No secrets, no pods, no cluster-wide ConfigMaps. No watch (it polls) and
+# no update (it applies). ClusterRoleBindings: read and delete only. No
+# bundle holds one (Lint refuses it), so the applier only prunes a managed
+# one; create or patch there with bind on the five roles would be a
+# cluster-wide grant to anyone.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: roid-k8s-applier
+  labels:
+    app: roid-k8s-applier
+rules:
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["clusterroles", "rolebindings"]
+    verbs: ["get", "list", "create", "patch", "delete"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["clusterrolebindings"]
+    verbs: ["get", "list", "delete"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["clusterroles"]
+    verbs: ["bind", "escalate"]
+    resourceNames: ["runos:view", "runos:edit", "runos:secrets-read", "runos:exec", "runos:ns-admin"]
+  # The deny policy and its binding: updated in place only. No create
+  # (Kubernetes refuses it to the applier, and a re-created policy is blind
+  # to its list) and no delete.
+  - apiGroups: ["admissionregistration.k8s.io"]
+    resources: ["validatingadmissionpolicies", "validatingadmissionpolicybindings"]
+    verbs: ["get", "list", "patch"]
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: roid-k8s-applier
+  labels:
+    app: roid-k8s-applier
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: roid-k8s-applier
+subjects:
+  - kind: ServiceAccount
+    name: roid-k8s-applier
+    namespace: roid-k8s-applier
+---
+# The deny list: the one ConfigMap the bundle holds.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: roid-k8s-applier-deny-list
+  namespace: runos
+  labels:
+    app: roid-k8s-applier
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "create", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: roid-k8s-applier-deny-list
+  namespace: runos
+  labels:
+    app: roid-k8s-applier
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: roid-k8s-applier-deny-list
+subjects:
+  - kind: ServiceAccount
+    name: roid-k8s-applier
+    namespace: roid-k8s-applier
+---
+# The version floor, by name. Create cannot be limited to a name, and this
+# namespace holds nothing else.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: roid-k8s-applier-floor
+  namespace: roid-k8s-applier
+  labels:
+    app: roid-k8s-applier
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "patch"]
+    resourceNames: ["roid-rbac-floor", "roid-rbac-keys"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: roid-k8s-applier-floor
+  namespace: roid-k8s-applier
+  labels:
+    app: roid-k8s-applier
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: roid-k8s-applier-floor
+subjects:
+  - kind: ServiceAccount
+    name: roid-k8s-applier
+    namespace: roid-k8s-applier
+---
+# The relay ConfigMaps, by name. The applier reads the bundle and the relay
+# ConfigMap (conductor writes them, the applier cannot) and reads and patches
+# its own status. No watch (it reads metadata every 500 ms instead) and no
+# update. Creating the status ConfigMap the first time is the unnamed
+# create of roid-k8s-applier-floor above.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: roid-k8s-applier-relay
+  namespace: roid-k8s-applier
+  labels:
+    app: roid-k8s-applier
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get"]
+    resourceNames: ["roid-rbac-bundle", "roid-rbac-relay"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "patch"]
+    resourceNames: ["roid-rbac-status"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: roid-k8s-applier-relay
+  namespace: roid-k8s-applier
+  labels:
+    app: roid-k8s-applier
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: roid-k8s-applier-relay
+subjects:
+  - kind: ServiceAccount
+    name: roid-k8s-applier
+    namespace: roid-k8s-applier
+---
+# THE DENY CANARY. After each pass the applier writes a ConfigMap in
+# a dry run as each of two reserved users, one on the deny list and one
+# not, and checks that the API server refuses the first and allows the
+# second. A dry run goes through admission and stores nothing; a
+# SubjectAccessReview would ask the authorizer only and never meet the
+# policy. The applier may impersonate these two users and no one else.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: roid-k8s-applier-canary
+  labels:
+    app: roid-k8s-applier
+rules:
+  - apiGroups: [""]
+    resources: ["users"]
+    verbs: ["impersonate"]
+    resourceNames: ["runos:u:runos-deny-canary-a", "runos:u:runos-deny-canary-b"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: roid-k8s-applier-canary
+  labels:
+    app: roid-k8s-applier
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: roid-k8s-applier-canary
+subjects:
+  - kind: ServiceAccount
+    name: roid-k8s-applier
+    namespace: roid-k8s-applier
+---
+# The canaries may create a ConfigMap here and nothing else, so a refusal
+# can only come from admission. Only the applier can act as them.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: roid-k8s-applier-canary-write
+  namespace: roid-k8s-applier
+  labels:
+    app: roid-k8s-applier
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: roid-k8s-applier-canary-write
+  namespace: roid-k8s-applier
+  labels:
+    app: roid-k8s-applier
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: roid-k8s-applier-canary-write
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: User
+    name: runos:u:runos-deny-canary-a
+  - apiGroup: rbac.authorization.k8s.io
+    kind: User
+    name: runos:u:runos-deny-canary-b
+---
+# Nothing calls the applier. It calls the API server and DNS. Not roid.
+# The ipBlock does not match node addresses on Cilium: cilium.yaml
+# adds the kube-apiserver entity there. Keep both.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: roid-k8s-applier
+  namespace: roid-k8s-applier
+  labels:
+    app: roid-k8s-applier
+spec:
+  podSelector:
+    matchLabels:
+      app: roid-k8s-applier
+  policyTypes: ["Ingress", "Egress"]
+  ingress: []
+  egress:
+    - to:
+        - ipBlock:
+            cidr: ${API_CIDR}
+      ports:
+        - protocol: TCP
+          port: ${API_PORT}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# The applier's state, the highest root chain it accepted,
+# survives a new pod. One replica, Recreate: one writer.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: roid-k8s-applier-state
+  namespace: roid-k8s-applier
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 64Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: roid-k8s-applier
+  namespace: roid-k8s-applier
+  labels:
+    app: roid-k8s-applier
+spec:
+  # One replica, replaced, never two at once. Two would be safe (the floor
+  # and server-side apply make a pass idempotent) but gain nothing.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: roid-k8s-applier
+  template:
+    metadata:
+      labels:
+        app: roid-k8s-applier
+    spec:
+      serviceAccountName: roid-k8s-applier
+      # The default token reaches this cluster's API server. There is no
+      # other token: the applier has no identity at roid.
+      automountServiceAccountToken: true
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: applier
+          image: ${IMAGE}
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: ROID_K8S_TRANSPORT
+              value: relay
+            - name: ROID_K8S_ACCOUNT
+              value: "${ACCOUNT}"
+            - name: ROID_K8S_TRUST_FILE
+              value: /etc/roid/trust.json
+            # The root chain floor: survives container restarts.
+            - name: ROID_K8S_STATE_DIR
+              value: /var/lib/roid-k8s
+            - name: ROID_K8S_NS_SELECTOR
+              value: "${NS_SELECTOR}"
+            # The envelope can reach 16 MiB decompressed. Keep the
+            # heap under the limit so the collector works before the kernel
+            # kills the pod.
+            - name: GOMEMLIMIT
+              value: 192MiB
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          volumeMounts:
+            - name: state
+              mountPath: /var/lib/roid-k8s
+            - name: trust
+              mountPath: /etc/roid
+              readOnly: true
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              memory: 256Mi
+      volumes:
+        # The root chain floor on a volume that survives a new pod.
+        - name: state
+          persistentVolumeClaim:
+            claimName: roid-k8s-applier-state
+        - name: trust
+          configMap:
+            name: roid-k8s-applier-trust

@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Build, vet, test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run go vet
+        run: go vet ./...
+
+      # The production build is CGO-free. Verify it builds with CGO off so a C
+      # dependency cannot creep back in and break the static image.
+      - name: Build (CGO off)
+        env:
+          CGO_ENABLED: "0"
+        run: go build ./...
+
+      # The race detector needs cgo; the runner ships gcc.
+      - name: Run tests
+        env:
+          CGO_ENABLED: "1"
+        run: go test -count=1 -race ./...
+
+  analysis:
+    name: staticcheck and govulncheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+
+      # The tools are pinned to exact versions. Go checks the downloaded module
+      # against the checksum database.
+      - name: Install staticcheck and govulncheck
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@2026.2.2
+          go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
+
+      - name: staticcheck
+        run: staticcheck ./...
+
+      - name: govulncheck
+        run: govulncheck ./...
+
+  source:
+    name: Source record
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      # This repository is generated from the RunOS source. SOURCE records the
+      # source commit and a hash of every other file. A hand edit changes the
+      # hash and fails here.
+      - name: Files match the tree hash in SOURCE
+        run: python3 scripts/treehash.py --check
+
+      - name: VERSION has a section in CHANGELOG.md
+        run: |
+          v="$(cat VERSION)"
+          grep -q "^## v${v}\$" CHANGELOG.md || { echo "CHANGELOG.md has no section for v${v}"; exit 1; }
+
+  image:
+    name: Image build (linux/amd64, no push)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Build image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          build-args: |
+            VERSION=ci

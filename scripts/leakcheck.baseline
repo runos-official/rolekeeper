@@ -1,0 +1,12 @@
+# leakcheck baseline (leakcheck v1.2.1)
+#
+# WHAT THIS FILE IS
+# Every line below is an internal identifier that is ALREADY PUBLISHED in this
+# public repo. The gate ignores these lines so that existing work is not
+# blocked, and fails on anything new.
+#
+# rolekeeper started clean, so this file starts empty. A line here is a record
+# of a leak that already happened, not a licence to add more.
+#
+# Columns are tab separated: <path> <kind> <token>
+# Regenerate with: make leakcheck-update

@@ -1,0 +1,30 @@
+# Rules for scripts/denycheck.py. Generated from the source tree's deny list.
+# Patterns are shown as they are. A name is shown only as the SHA-256 of its
+# lower-case form; the script hashes every token of every file and compares.
+re fpl-number \bFPL\s*\d+
+re fcr-number \bFCR\s*\d+
+re review-id \bR\d+-[A-Z0-9]+(?:-[A-Z0-9]+)?\b
+re rule-number \brule\s+\d+\.\d+
+re section-item \b\d+\.\d+(?:,\s*\d+\.\d+)*\s+items?\s+\d+
+re spec-section \b(?:policy-semantics|section\s+12\.\d+)
+re review-round \b(?:review\s+)?round\s+\d+|\breview\s+(?:lead\s+)?ruling\b|\blead\s+ruling\b|\bruling\s+(?:item\s+)?\d+
+re work-item-id (?:^|[^\\A-Za-z0-9])(?:rb\d[a-z]?|f\d{2}[a-z]|x\d{2})\b
+re design-ref \bthreat\s+model\b|\b(?:fix\s+)?cycle\s+\d+[A-Z]?\b|\bfindings?\s+F\d+\b|\bF\d\.|\bitem\s+[A-Z]\b|\bTask\s+[A-Z]\b|\bA\.8\.\d+\b|\bcontract\s+C\d\b
+re isms \bISMS\b|\bISO\s?27001\b|\bSOC\s?2\b
+re internal-doc \bdocs/(?:runbooks|work|isms)/
+re email [A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}\b
+re runos-host \b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.runos\.(?:com|dev)\b
+re environment \brunos-(?:prod|beta|dev)\b|\b(?:in|on|for)\s+(?:the\s+)?prod(?:uction)?\b|\bprod(?:uction)?\s+(?:root|cluster|environment|namespace|deployment)\b|\bstaging\b
+re operator-decision \boperator(?:'s)?\s+(?:ruling|decision|call|rule)\b
+re iso-date \b20\d\d-\d\d-\d\d\b
+re key-custody (?:^|[^.A-Za-z0-9])(?:AWS|KMS|PKCS\s?#?11|YubiKeys?|HSMs?|Object\s+Lock|SoftHSM)\b
+re test-id \bAT-[A-Z0-9]+-\d+\b|\bSIG-\d+\b|\bR20\b
+re internal-path \bproto/|\bscripts/up\.sh|\brun/runos\b|README\.md|\bsigner/(?:jobgrant|intake|receipt|checkpoint|cmd|pkcs11)\b|\brootceremony\b|\bdesign\s+(?:record|sections?|\d)|\bsections?\s+\d+(?:\.\d+)*\b
+allow security@runos\.com
+allow [A-Za-z0-9._%+-]+@example\.(?:com|org|net)
+hash 78c5adca4d421f37a383af78b68e5bd86fe708419bf207cc0d1f40d8b09d9690
+hash bd2a30cc478348cdfc0981fe6a298b7dcc6a4ac51c7072dd259b889b6aa07738
+hash f4d776c2a0a1589c25c1a835630c2d7ba81ca6107d7aa69082520228c15af770
+hash c6de3c105315372cbbc427cb3a96544cb9edc0f91b557deccfe10442fad08854
+hash f1a69708d3d8e7fc5e1143463daa2a0e0ae2857baf56c6006cf642636d2f71d0
+hash b1e176e2899349926068846b3de083c639810a1b923f2cdec94ea94b152c35ee

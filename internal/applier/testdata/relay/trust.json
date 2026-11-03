@@ -1,0 +1,29 @@
+{
+  "issuer": "https://roid.example.test",
+  "cluster": "cl-1",
+  "root_public_der": "MCowBQYDK2VwAyEALhf9dbgW3LZw05BcXC8e4RFzWRJ4XLY5dl5kU+UUoX8=",
+  "root_alg": "EdDSA",
+  "bundle_keys": {
+    "purpose": "policy-bundle",
+    "epoch": 1,
+    "version": 1,
+    "issued_at": "2026-10-16T09:00:00Z",
+    "keys": [
+      {
+        "kid": "policy-bundle-f432545fbf7a48ab8f1f",
+        "alg": "EdDSA",
+        "state": "active",
+        "x": "MCowBQYDK2VwAyEA1WFXLLBuirUd5f/jmyzsFtKpwsMvxQssQe9kteRzHc0=",
+        "published_at": "2026-10-16T09:00:00Z",
+        "activated_at": "2026-10-16T09:00:00Z"
+      },
+      {
+        "kid": "policy-bundle-0406aba6b82fc5168b21",
+        "alg": "EdDSA",
+        "state": "next",
+        "x": "MCowBQYDK2VwAyEAdODD+U1fsOGgGuRnkkjZUdFsOthvDOac81dMVpPucb4=",
+        "published_at": "2026-10-16T09:00:00Z"
+      }
+    ]
+  }
+}

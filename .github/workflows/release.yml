@@ -1,0 +1,134 @@
+name: Release
+
+# A tag v<version> builds and publishes ghcr.io/runos-official/rolekeeper for
+# linux/amd64 and linux/arm64, with a software bill of materials and a keyless
+# build-provenance attestation. Verify an image with:
+#   gh attestation verify oci://ghcr.io/runos-official/rolekeeper:<version> \
+#     --repo runos-official/rolekeeper
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+env:
+  IMAGE_NAME: ghcr.io/runos-official/rolekeeper
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    # Only this job may write packages and attestations.
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+
+      - name: Check the tag against VERSION and the source record
+        id: version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          [ "$version" = "$(cat VERSION)" ] || { echo "tag $GITHUB_REF_NAME does not match VERSION $(cat VERSION)"; exit 1; }
+          grep -q "^## v${version}\$" CHANGELOG.md || { echo "CHANGELOG.md has no section for v${version}"; exit 1; }
+          python3 scripts/treehash.py --check
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          # A semver pre-release suffix (-rc.1) is published and pinnable by
+          # exact version but never tagged latest.
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Gates
+        run: |
+          python3 scripts/leakcheck.py
+          python3 scripts/unscannable_check.py
+          python3 scripts/denycheck.py
+          go vet ./...
+          go test -count=1 ./...
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute image tags
+        id: tags
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+        run: |
+          tags="${IMAGE_NAME}:${VERSION}"
+          # Only a stable build moves the latest tag.
+          if [ "$PRERELEASE" = "false" ]; then
+            tags="${tags},${IMAGE_NAME}:latest"
+          fi
+          echo "tags=${tags}" >> "$GITHUB_OUTPUT"
+
+      # The source label links the package to this repository, so the package
+      # takes the repository's public visibility. sbom and provenance attach a
+      # software bill of materials and a build record to the image.
+      - name: Build and push image
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          sbom: true
+          provenance: mode=max
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+
+      # Keyless Sigstore attestation bound to the image digest and to this
+      # workflow's OIDC identity.
+      - name: Attest image provenance
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
+        with:
+          subject-name: ${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      - name: Publish the digest in the job summary
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          {
+            echo "## rolekeeper ${VERSION}"
+            echo
+            echo "Image digest: \`${DIGEST}\`"
+            echo
+            echo "Reference for a pod manifest:"
+            echo
+            echo "\`\`\`"
+            echo "${IMAGE_NAME}:${VERSION}@${DIGEST}"
+            echo "\`\`\`"
+            echo
+            echo "Verify:"
+            echo
+            echo "\`\`\`"
+            echo "gh attestation verify oci://${IMAGE_NAME}@${DIGEST} --repo ${GITHUB_REPOSITORY}"
+            echo "\`\`\`"
+          } >> "$GITHUB_STEP_SUMMARY"

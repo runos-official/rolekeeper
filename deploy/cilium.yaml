@@ -1,0 +1,55 @@
+# The roid RBAC applier's (rolekeeper's) network policy for Cilium clusters.
+# The NetworkPolicy in relay.yaml names the control plane node IPs as an
+# ipBlock. Cilium does not match node (host) addresses through an ipBlock, so
+# on a Cilium cluster the applier could not reach the API server at all: every
+# call through the kubernetes service timed out and the install ended with
+# "applier wrote no status yet" (measured on a lab cluster: deleting the
+# policy fixed it at once). kind does not enforce NetworkPolicy, so a kind
+# test never sees it.
+#
+# This policy adds the Cilium way to name the API server, the kube-apiserver
+# entity. Cilium adds up the allow rules of every policy that selects a pod,
+# so with the NetworkPolicy in place the applier may reach the API server and
+# DNS, and nothing else. It still takes no connection: this policy has no
+# ingress rule and the NetworkPolicy keeps the ingress default deny. Keep the
+# NetworkPolicy: other CNIs honour it, and it holds the DNS rule too.
+#
+# It is its own file because the CiliumNetworkPolicy CRD exists only where
+# Cilium runs. The installer (conductor) applies this file after relay.yaml
+# on a cluster that has the CRD (kubectl get crd
+# ciliumnetworkpolicies.cilium.io). It has no placeholders: nothing here is
+# filled.
+#
+# 443 is the kubernetes service port and 6443 the API server's own port. Which
+# one Cilium evaluates depends on where the service address is translated, so
+# the policy opens both.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: roid-k8s-applier
+  namespace: roid-k8s-applier
+  labels:
+    app: roid-k8s-applier
+spec:
+  endpointSelector:
+    matchLabels:
+      app: roid-k8s-applier
+  egress:
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+            - port: "6443"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP

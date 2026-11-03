@@ -1,0 +1,10 @@
+{
+  "now": "2026-10-16T09:00:00Z",
+  "account": "acct-a",
+  "cluster": "cl-1",
+  "nonce": "dmVjdG9yLW5vbmNlLTAwMDE",
+  "content_digest": "a343d2ef75e79ce61101b59bbba43f8d207535f4bd3d65f28da186b700c99e5d",
+  "body_sha256": "84dda8e637bc72376c29141d43991124d89a76b809ee89d8b4b4e4aac661a39c",
+  "envelope_sha256": "ad00399a47959a5cf7662165665680b7913125aeffdf273cfa78a586d0e18f59",
+  "body_gz_bytes": 732
+}

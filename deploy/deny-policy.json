@@ -1,0 +1,96 @@
+{
+  "apiVersion": "v1",
+  "items": [
+    {
+      "apiVersion": "v1",
+      "data": {},
+      "kind": "ConfigMap",
+      "metadata": {
+        "labels": {
+          "runos.com/account": "${ACCOUNT}",
+          "runos.com/policy-version": "install",
+          "runos.com/roid-managed": "true"
+        },
+        "name": "runos-deny-writes",
+        "namespace": "runos"
+      }
+    },
+    {
+      "apiVersion": "admissionregistration.k8s.io/v1",
+      "kind": "ValidatingAdmissionPolicy",
+      "metadata": {
+        "labels": {
+          "runos.com/account": "${ACCOUNT}",
+          "runos.com/policy-version": "install",
+          "runos.com/roid-managed": "true"
+        },
+        "name": "runos-deny-writes"
+      },
+      "spec": {
+        "failurePolicy": "Fail",
+        "matchConditions": [
+          {
+            "expression": "request.userInfo.username.startsWith('runos:u:')",
+            "name": "runos-person"
+          }
+        ],
+        "matchConstraints": {
+          "resourceRules": [
+            {
+              "apiGroups": [
+                "*"
+              ],
+              "apiVersions": [
+                "*"
+              ],
+              "operations": [
+                "CREATE",
+                "UPDATE",
+                "DELETE",
+                "CONNECT"
+              ],
+              "resources": [
+                "*/*"
+              ]
+            }
+          ]
+        },
+        "paramKind": {
+          "apiVersion": "v1",
+          "kind": "ConfigMap"
+        },
+        "validations": [
+          {
+            "expression": "!has(params.data) || !(request.userInfo.username.substring(8) in params.data)",
+            "message": "runos: this person's writes are cut (deny list)",
+            "reason": "Forbidden"
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "admissionregistration.k8s.io/v1",
+      "kind": "ValidatingAdmissionPolicyBinding",
+      "metadata": {
+        "labels": {
+          "runos.com/account": "${ACCOUNT}",
+          "runos.com/policy-version": "install",
+          "runos.com/roid-managed": "true"
+        },
+        "name": "runos-deny-writes"
+      },
+      "spec": {
+        "paramRef": {
+          "name": "runos-deny-writes",
+          "namespace": "runos",
+          "parameterNotFoundAction": "Allow"
+        },
+        "policyName": "runos-deny-writes",
+        "validationActions": [
+          "Deny"
+        ]
+      }
+    }
+  ],
+  "kind": "List"
+}

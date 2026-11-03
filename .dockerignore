@@ -1,0 +1,5 @@
+.git
+.github
+.githooks
+scripts
+*.md
