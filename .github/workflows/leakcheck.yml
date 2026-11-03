@@ -52,7 +52,7 @@ jobs:
       # Pinned to an exact version; Go checks the module against the checksum
       # database.
       - name: Install gitleaks
-        run: go install github.com/gitleaks/gitleaks/v8@v8.30.1
+        run: go install github.com/zricethezav/gitleaks/v8@v8.30.1
 
       - name: gitleaks (files and history)
         run: |
