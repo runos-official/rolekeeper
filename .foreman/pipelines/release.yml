@@ -91,6 +91,7 @@ steps:
     expect: [version, previous_commit, new_commit]
     observe: new_commit must be the tip of the integration branch. previous_commit is the commit that the record branch holds before this release, and for a final it equals new_commit.
     timeout: 3600
+    slow: true
 
   - name: Tag and push
     description: "Tags dev and pushes the branch and the tag. The tag starts the release workflow. The record is not touched here; the last step moves it."
