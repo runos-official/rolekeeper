@@ -67,8 +67,12 @@ Only the RunOS team releases. The release tool stays in the open: you can read
 every step and every check.
 
 A release starts as a regeneration from the RunOS source. The new export lands
-on the `dev` branch. `main` stays as it is until the team has checked the
-release and fast-forwards it.
+on the `dev` branch. Two branches record what shipped, and both move by
+fast-forward only after the release is verified. `deployed` holds the last
+commit that was tagged, a candidate or a final. `main` is the prod record: a
+final fast-forwards it to the commit its tag names, and a candidate never moves
+it. A final is refused before the tag when `main` is not an ancestor of `dev`.
+`scripts/record-release.sh` holds the rule.
 
 Run the gates without any side effect:
 

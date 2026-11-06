@@ -34,6 +34,8 @@ evidence() {
   new_commit="$(git rev-parse --short=12 "$TAG^{commit}" 2>/dev/null)" || new_commit=""
   # The release before this one: the nearest tag that is older than the tagged commit.
   previous_commit="$(git rev-parse --short=12 "$(git describe --tags --abbrev=0 --match 'v*' "$TAG^{commit}^" 2>/dev/null)^{commit}" 2>/dev/null)" || previous_commit=""
+  echo "== record branches on origin (deployed: last tagged; main: the prod record, moved by a final)"
+  git ls-remote origin refs/heads/deployed refs/heads/main 2>&1
   echo "== source record"
   grep -E '^(source|commit|files|exporter):' SOURCE 2>&1
   echo "== workflow run"

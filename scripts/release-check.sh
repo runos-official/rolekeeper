@@ -8,11 +8,18 @@
 #
 # Settings (environment):
 #   RELEASE_BRANCH         the branch that is released (default: dev)
-#   RELEASE_RECORD_BRANCH  the branch that records what has shipped (default: deployed)
+#   RELEASE_RECORD_BRANCH  the branch that records what has shipped (default: deployed).
+#                          A prod target passes main here. main is the prod record,
+#                          not the record of candidates, so previous_commit then still
+#                          reads deployed.
 #
 # It reports to Foreman (see foreman-observe.sh): the facts version,
-# previous_commit (the record branch on origin before this release) and
-# new_commit (the commit that is released), and one summary line.
+# previous_commit (deployed on origin before this release) and new_commit (the
+# commit that is released), and one summary line.
+#
+# A final also fast-forwards main (scripts/record-release.sh), so main must already
+# be an ancestor of the commit that is released. The gate refuses a final here,
+# before any tag exists, when it is not.
 #
 # A tag is v<base> for a final or v<base>-rc.<n> for a candidate. VERSION holds
 # the base, so a candidate and its final come from one commit.
@@ -26,6 +33,9 @@ source "$HERE/foreman-observe-facts.sh"
 
 BRANCH="${RELEASE_BRANCH:-dev}"
 RECORD="${RELEASE_RECORD_BRANCH:-deployed}"
+PROD_RECORD="main"
+# previous_commit reads the record of candidates, which is deployed, also for a prod target.
+[[ "$RECORD" == "$PROD_RECORD" ]] && RECORD="deployed"
 TAG="${1:-}"
 
 step() { printf '==> %s\n' "$1"; }
@@ -72,6 +82,13 @@ ok "tag $TAG is free"
 [[ -z "$(git status --porcelain)" ]] || die "working tree is not clean"
 [[ "$(git rev-parse HEAD)" == "$(git rev-parse "origin/$BRANCH")" ]] || die "HEAD is not the tip of origin/$BRANCH"
 ok "clean tree at the tip of origin/$BRANCH"
+
+if [[ "$TAG" != *-* ]]; then
+  git fetch --quiet origin "+refs/heads/$PROD_RECORD:refs/remotes/origin/$PROD_RECORD" || die "cannot fetch $PROD_RECORD from origin; a final fast-forwards it"
+  git merge-base --is-ancestor "origin/$PROD_RECORD" HEAD \
+    || die "origin/$PROD_RECORD is not an ancestor of $BRANCH, so $TAG could not fast-forward it: merge $PROD_RECORD into $BRANCH first"
+  ok "$PROD_RECORD is an ancestor of $BRANCH: $TAG can fast-forward it"
+fi
 
 step "Source record"
 python3 scripts/treehash.py --check || die "the files do not match SOURCE: regenerate them from the RunOS source, do not edit them here"
