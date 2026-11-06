@@ -48,11 +48,23 @@ jobs:
           CGO_ENABLED: "0"
         run: go build ./...
 
-      # The race detector needs cgo; the runner ships gcc.
+      # The race detector needs cgo; the runner ships gcc. -cover costs little
+      # and the same run feeds the coverage floors below.
       - name: Run tests
         env:
           CGO_ENABLED: "1"
-        run: go test -count=1 -race ./...
+        run: |
+          rc=0
+          go test -count=1 -race -cover ./... > test-output.txt 2>&1 || rc=$?
+          cat test-output.txt
+          exit "$rc"
+
+      # scripts/coverage-floors.txt holds the lowest coverage of each package.
+      - name: Coverage floors
+        run: scripts/coverage-floors --from test-output.txt
+
+      - name: Test the gate scripts
+        run: python3 scripts/coverage_floors_test.py
 
   leak-gates:
     name: Leak gates

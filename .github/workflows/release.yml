@@ -60,8 +60,13 @@ jobs:
           python3 scripts/leakcheck.py
           python3 scripts/unscannable_check.py
           python3 scripts/denycheck.py
+          test -z "$(gofmt -l .)"
           go vet ./...
-          go test -count=1 ./...
+          rc=0
+          CGO_ENABLED=1 go test -count=1 -race -cover ./... > test-output.txt 2>&1 || rc=$?
+          cat test-output.txt
+          [ "$rc" -eq 0 ]
+          scripts/coverage-floors --from test-output.txt
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3

@@ -1,0 +1,23 @@
+# The lowest statement coverage, in percent, that each package may have.
+# scripts/coverage-floors checks it against `go test -cover ./...`. Raise a
+# floor when you raise the coverage; do not lower one to get a change through.
+#
+# Floors sit a few points under the measured value, so a small change does not
+# trip them but a package that loses its tests does. compile, reconcile, kobj
+# and signer were measured near 100 after their unit tests were written; the
+# floor of 90 keeps them there. A package with no statements needs no line.
+#
+#   package             floor
+applier                 80
+bundle                  80
+cmd/rolekeeper          5
+compile                 90
+kobj                    90
+kubeapi                 78
+reconcile               90
+signer                  90
+signer/jws              85
+signer/keys             75
+signer/revlog           78
+signer/roottrust        72
+signer/token            87

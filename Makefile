@@ -15,6 +15,10 @@ build: ## Build a static binary stamped with the version
 test: ## Run the tests with the race detector
 	$(GO) test -count=1 -race ./...
 
+.PHONY: coverage
+coverage: ## Run the tests with coverage and check the floors in scripts/coverage-floors.txt
+	CGO_ENABLED=1 scripts/coverage-floors
+
 .PHONY: vet
 vet: ## Run go vet
 	$(GO) vet ./...
@@ -54,6 +58,7 @@ leakcheck-test: ## Test the leak checkers themselves
 	$(PYTHON) scripts/leakcheck_test.py
 	$(PYTHON) scripts/denycheck_test.py
 	$(PYTHON) scripts/msgcheck_test.py
+	$(PYTHON) scripts/coverage_floors_test.py
 
 .PHONY: hooks
 hooks: ## Install the tracked git hooks (run once per clone)

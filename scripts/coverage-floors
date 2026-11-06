@@ -1,0 +1,153 @@
+#!/usr/bin/env python3
+"""coverage-floors: fail when a package has less test coverage than its floor.
+
+scripts/coverage-floors.txt lists one package per line: the import path
+without the module prefix, then the lowest statement coverage in percent that
+the package may have.
+
+  scripts/coverage-floors              run `go test -race -count=1 -cover ./...`
+                                       and check the result
+  scripts/coverage-floors --from FILE  check the saved output of such a run
+                                       (CI runs the tests once and checks the
+                                       output, so the tests are not run twice)
+  scripts/coverage-floors --floors F   read the floors from F
+
+It fails when
+
+  - a package is below its floor,
+  - a package that has statements has no floor (a new package needs one), or
+  - a floor names a package that the run did not report (a stale line).
+
+A package with no statements, such as one that only embeds files, needs no
+floor. Raise a floor when you raise the coverage. Do not lower one to get a
+change through.
+
+Exit codes: 0 all floors held, 1 a floor failed or the tests failed, 2 usage
+or environment error.
+"""
+
+from __future__ import annotations
+
+import os
+import re
+import subprocess
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DEFAULT_FLOORS = os.path.join(ROOT, "scripts", "coverage-floors.txt")
+
+OK_LINE = re.compile(r"^ok\s+(\S+)\s+\S+\s+coverage:\s+(?:([0-9.]+)% of statements|\[no statements\])")
+NO_TESTS = re.compile(r"^\?\s+(\S+)\s+\[no test files\]")
+FAIL_LINE = re.compile(r"^(?:FAIL|---\s+FAIL)\b")
+
+
+def module_path():
+    with open(os.path.join(ROOT, "go.mod"), encoding="utf-8") as fh:
+        for line in fh:
+            if line.startswith("module "):
+                return line.split(None, 1)[1].strip()
+    raise SystemExit("coverage-floors: go.mod has no module line")
+
+
+def load_floors(path):
+    floors = {}
+    with open(path, encoding="utf-8") as fh:
+        for n, raw in enumerate(fh, 1):
+            line = raw.split("#", 1)[0].strip()
+            if not line:
+                continue
+            parts = line.split()
+            if len(parts) != 2:
+                raise SystemExit("coverage-floors: %s:%d: want '<package> <percent>'" % (path, n))
+            try:
+                floor = float(parts[1])
+            except ValueError:
+                raise SystemExit("coverage-floors: %s:%d: %r is not a number" % (path, n, parts[1]))
+            if parts[0] in floors:
+                raise SystemExit("coverage-floors: %s:%d: %s is listed twice" % (path, n, parts[0]))
+            floors[parts[0]] = floor
+    return floors
+
+
+def parse(text, prefix):
+    """Return ({package: percent or None}, tests_failed) from go test output."""
+    cover, failed = {}, False
+    for line in text.splitlines():
+        if FAIL_LINE.match(line):
+            failed = True
+        m = OK_LINE.match(line)
+        if m:
+            cover[m.group(1).removeprefix(prefix).strip("/") or "."] = float(m.group(2)) if m.group(2) else None
+            continue
+        m = NO_TESTS.match(line)
+        if m:
+            cover[m.group(1).removeprefix(prefix).strip("/") or "."] = 0.0
+    return cover, failed
+
+
+def check(cover, floors):
+    """Return the list of problems; empty when every floor holds."""
+    problems = []
+    for pkg in sorted(cover):
+        pct = cover[pkg]
+        if pct is None:
+            continue  # no statements
+        if pkg not in floors:
+            problems.append("%s: %.1f%% covered and no floor listed" % (pkg, pct))
+        elif pct < floors[pkg]:
+            problems.append("%s: %.1f%% is below the floor of %.1f%%" % (pkg, pct, floors[pkg]))
+    for pkg in sorted(floors):
+        if pkg not in cover:
+            problems.append("%s: a floor is listed but the run reported no such package" % pkg)
+    return problems
+
+
+def main(argv):
+    floors_path, source = DEFAULT_FLOORS, None
+    args = list(argv)
+    while args:
+        a = args.pop(0)
+        if a == "--from" and args:
+            source = args.pop(0)
+        elif a == "--floors" and args:
+            floors_path = args.pop(0)
+        else:
+            sys.stderr.write(__doc__)
+            return 2
+
+    floors = load_floors(floors_path)
+    prefix = module_path() + "/"
+    if source:
+        with open(source, encoding="utf-8", errors="replace") as fh:
+            text = fh.read()
+        rc = 0
+    else:
+        proc = subprocess.run(["go", "test", "-race", "-count=1", "-cover", "./..."], cwd=ROOT, capture_output=True, text=True)
+        text, rc = proc.stdout + proc.stderr, proc.returncode
+        sys.stdout.write(text)
+
+    cover, failed = parse(text, prefix)
+    if rc != 0 or failed:
+        sys.stderr.write("coverage-floors: the tests failed, so the coverage is not checked\n")
+        return 1
+    if not cover:
+        sys.stderr.write("coverage-floors: no coverage lines found in the test output\n")
+        return 2
+
+    print("\ncoverage floors")
+    for pkg in sorted(cover):
+        pct = cover[pkg]
+        floor = floors.get(pkg)
+        print("  %-22s %7s  floor %s" % (pkg, "-" if pct is None else "%.1f%%" % pct, "-" if floor is None else "%.1f%%" % floor))
+    problems = check(cover, floors)
+    if problems:
+        sys.stderr.write("\ncoverage-floors FAILED\n")
+        for p in problems:
+            sys.stderr.write("  %s\n" % p)
+        return 1
+    print("coverage-floors: every floor holds")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

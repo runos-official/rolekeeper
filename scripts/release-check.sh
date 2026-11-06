@@ -94,6 +94,9 @@ step "Leak gates"
 python3 scripts/leakcheck.py || die "leakcheck failed"
 python3 scripts/unscannable_check.py || die "unscannable_check failed"
 python3 scripts/denycheck.py || die "denycheck failed"
+# Every commit since the last tag: the messages and file names go public with the tag.
+last_tag="$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)"
+python3 scripts/msgcheck.py --range "${last_tag:+$last_tag..}HEAD" || die "msgcheck failed: a commit message or file name holds text that does not belong in a public repo"
 
 step "Build, vet, test"
 [[ -z "$(gofmt -l .)" ]] || die "gofmt -l lists files: run gofmt"
@@ -102,8 +105,15 @@ CGO_ENABLED=0 go build ./... || die "go build failed"
 ok "go build"
 go vet ./... || die "go vet failed"
 ok "go vet"
-CGO_ENABLED=1 go test -count=1 -race ./... || die "go test failed"
+test_output="$(mktemp)"
+trap 'rm -f "$test_output"' EXIT
+rc=0
+CGO_ENABLED=1 go test -count=1 -race -cover ./... > "$test_output" 2>&1 || rc=$?
+cat "$test_output"
+[[ "$rc" -eq 0 ]] || die "go test failed"
 ok "go test"
+scripts/coverage-floors --from "$test_output" || die "a package is below its coverage floor"
+ok "coverage floors"
 
 printf 'All gates passed for %s. Nothing was tagged or pushed.\n' "$TAG"
 fm_summary "all release gates passed for $TAG at $(git rev-parse --short=12 HEAD); nothing was tagged or pushed"
