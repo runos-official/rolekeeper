@@ -90,9 +90,6 @@ if [[ "$TAG" != *-* ]]; then
   ok "$PROD_RECORD is an ancestor of $BRANCH: $TAG can fast-forward it"
 fi
 
-step "Source record"
-python3 scripts/treehash.py --check || die "the files do not match SOURCE: regenerate them from the RunOS source, do not edit them here"
-
 step "Leak gates"
 python3 scripts/leakcheck.py || die "leakcheck failed"
 python3 scripts/unscannable_check.py || die "unscannable_check failed"

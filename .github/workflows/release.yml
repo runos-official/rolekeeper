@@ -34,7 +34,7 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Check the tag against VERSION and the source record
+      - name: Check the tag against VERSION and CHANGELOG.md
         id: version
         run: |
           # A tag is v<base> for a final or v<base>-rc.<n> for a release
@@ -46,7 +46,6 @@ jobs:
           base="${version%%-*}"
           [ "$base" = "$(cat VERSION)" ] || { echo "tag $tag does not match VERSION $(cat VERSION)"; exit 1; }
           grep -q "^## v${base}\$" CHANGELOG.md || { echo "CHANGELOG.md has no section for v${base}"; exit 1; }
-          python3 scripts/treehash.py --check
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           # A release candidate (-rc.1) is published and pinnable by exact
           # version but never tagged latest.

@@ -36,8 +36,8 @@ evidence() {
   previous_commit="$(git rev-parse --short=12 "$(git describe --tags --abbrev=0 --match 'v*' "$TAG^{commit}^" 2>/dev/null)^{commit}" 2>/dev/null)" || previous_commit=""
   echo "== record branches on origin (deployed: last tagged; main: the prod record, moved by a final)"
   git ls-remote origin refs/heads/deployed refs/heads/main 2>&1
-  echo "== source record"
-  grep -E '^(source|commit|files|exporter):' SOURCE 2>&1
+  echo "== tagged commit"
+  git log -1 --format='commit: %H%nauthor date: %aI%nsubject: %s' "$TAG^{commit}" 2>&1
   echo "== workflow run"
   url="unavailable"; conclusion="unavailable"
   run_id="$(gh run list --workflow=release.yml --limit 20 --json databaseId,headBranch,event \

@@ -11,9 +11,8 @@
 # publishes a version and a digest to pin.
 #
 # The gates are not copied here. scripts/release-check.sh holds them all, so
-# there is one place that can drift. This repository is generated from the
-# RunOS source: a change to a file goes into the source and arrives in the next
-# export. Do not edit the files here.
+# there is one place that can drift. This repository is the source: a change to
+# a file, this one included, lands on dev by pull request.
 #
 # gh authenticates from the host keyring, so no credential is injected.
 #
@@ -87,7 +86,7 @@ steps:
     timeout: 120
 
   - name: Gate chain
-    description: "scripts/release-check.sh: VERSION and CHANGELOG, the tag is free, the files match SOURCE, the leak gates, gofmt, build, vet and the race tests. Every gate and no side effect."
+    description: "scripts/release-check.sh: VERSION and CHANGELOG, the tag is free, the leak gates, gofmt, build, vet and the race tests. Every gate and no side effect."
     run: RELEASE_BRANCH="${{ target.branch }}" RELEASE_RECORD_BRANCH="${{ target.deployed_branch }}" scripts/release-check.sh "${{ version }}"
     expect: [version, previous_commit, new_commit]
     observe: new_commit must be the tip of the integration branch. previous_commit is the commit that the record branch holds before this release, and for a final it equals new_commit.
@@ -181,7 +180,7 @@ steps:
     timeout: 120
 
   - name: Collect evidence
-    description: "Prints what the release left behind: the tag commits, the SOURCE record, the workflow run with every job and step conclusion, and the registry digest and platforms. It only reads and prints no verdict."
+    description: "Prints what the release left behind: the tag commits, the tagged commit, the workflow run with every job and step conclusion, and the registry digest and platforms. It only reads and prints no verdict."
     always: true
     run: bash scripts/release-evidence.sh "${{ version }}" "${{ run_dir }}/evidence.txt"
     expect: [workflow_run_url, conclusion, digest, platforms, evidence]

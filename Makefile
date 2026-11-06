@@ -45,10 +45,6 @@ leakcheck-staged: ## Scan only the staged diff
 leakcheck-test: ## Test the leak checker itself
 	$(PYTHON) scripts/leakcheck_test.py
 
-.PHONY: sourcecheck
-sourcecheck: ## Check the files against the tree hash recorded in SOURCE
-	$(PYTHON) scripts/treehash.py --check
-
 .PHONY: hooks
 hooks: ## Install the tracked git hooks (run once per clone)
 	git config core.hooksPath .githooks

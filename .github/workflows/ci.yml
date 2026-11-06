@@ -61,17 +61,11 @@ jobs:
       - name: govulncheck
         run: govulncheck ./...
 
-  source:
-    name: Source record
+  changelog:
+    name: Changelog
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-
-      # This repository is generated from the RunOS source. SOURCE records the
-      # source commit and a hash of every other file. A hand edit changes the
-      # hash and fails here.
-      - name: Files match the tree hash in SOURCE
-        run: python3 scripts/treehash.py --check
 
       - name: VERSION has a section in CHANGELOG.md
         run: |
