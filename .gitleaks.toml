@@ -1,9 +1,9 @@
-# gitleaks configuration. The default rules apply; one path is allowed.
+# gitleaks configuration. The default rules apply; the test vector paths are allowed.
 title = "rolekeeper"
 
 [extend]
 useDefault = true
 
 [[allowlists]]
-description = "Relay test vectors: tokens signed with a throwaway test key and long expired when they are used; the trust file next to them holds public keys only."
-paths = ['''applier/testdata/relay/''']
+description = "Test vectors: tokens signed with throwaway TEST-ONLY keys, with a fixed clock; the trust held next to them has public keys only."
+paths = ['''applier/testdata/relay/''', '''testdata/conformance/''']

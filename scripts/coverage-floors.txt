@@ -12,6 +12,7 @@ applier                 80
 bundle                  80
 cmd/rolekeeper          5
 compile                 90
+conformance             88
 kobj                    90
 kubeapi                 78
 reconcile               90
