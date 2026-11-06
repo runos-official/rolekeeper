@@ -109,6 +109,7 @@ docker buildx imagetools inspect ghcr.io/runos-official/rolekeeper:<version> \
 ```sh
 make build      # a static binary, ./rolekeeper
 make test       # the tests, with the race detector
+make coverage   # the tests, then the coverage floors
 make image      # the container image for this machine's architecture
 ```
 
@@ -142,18 +143,24 @@ shared with RunOS and may change between minor versions.
 | `signer/token` | Token issue and verification |
 | `cmd/rolekeeper` | The binary |
 
-## Where this code comes from
+## How changes reach this repository
 
-This repository is **generated** from the RunOS source tree. The file
-[SOURCE](SOURCE) records the commit that produced it and a hash of every other
-file. `python3 scripts/treehash.py --check` recomputes the hash, so a hand
-edit shows. Pull requests cannot be merged here; see
-[CONTRIBUTING.md](CONTRIBUTING.md).
+This repository is the source of rolekeeper. Nothing is generated or copied
+from elsewhere: the code, the tests, the release scripts and the gates that you
+see here are the ones that RunOS builds and releases from.
+
+Work lands on the `dev` branch by pull request. CI runs on every pull request
+and every push to `dev` and `main`: formatting, `go vet`, the tests with the
+race detector, the coverage floors, `staticcheck`, `govulncheck`, and the leak
+gates that keep credentials and internal references out of a public
+repository. Pull requests are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md)
+for how to build, test and release.
 
 ## Documentation
 
 - [SECURITY.md](SECURITY.md): the trust model and how to report a vulnerability
-- [CONTRIBUTING.md](CONTRIBUTING.md): how changes reach this repository
+- [CONTRIBUTING.md](CONTRIBUTING.md): how to build, test, change and release
+- [docs/conformance.md](docs/conformance.md): the frozen test vectors that signer and verifier agree on
 - [CHANGELOG.md](CHANGELOG.md): release history
 - [deploy/](deploy): the reference manifests the pod is installed from
 

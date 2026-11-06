@@ -78,10 +78,12 @@ pipeline.
    a suffix (for example `v0.2.0-rc.1`) is published and can be pinned by exact
    version, but never becomes `latest`.
 
-4. **A generated repository.** The files in this repository are the output of an
-   export from the RunOS source. `SOURCE` records the source commit and a tree
-   hash; CI recomputes the hash on every push and the release workflow checks it
-   again.
+4. **Standing gates before a merge.** CI runs on every pull request and every
+   push to `dev` and `main`: formatting, `go vet`, the tests with the race
+   detector, the coverage floors, `staticcheck`, `govulncheck`, a scan of the
+   files, the file names and the commit messages for credentials and internal
+   references, and `gitleaks` over the history. A release is cut only from a
+   commit that passed them.
 
 ### What attestation does not guarantee
 

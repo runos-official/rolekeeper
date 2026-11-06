@@ -1,4 +1,4 @@
-# Rules for scripts/denycheck.py. Generated from the source tree's deny list.
+# Rules for scripts/denycheck.py. Edit this file here, by pull request.
 # Patterns are shown as they are. A name is shown only as the SHA-256 of its
 # lower-case form; the script hashes every token of every file and compares.
 re fpl-number \bFPL\s*\d+

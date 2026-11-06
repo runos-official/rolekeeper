@@ -11,8 +11,8 @@ The rules are in scripts/denycheck.rules. A pattern appears there as it is. A
 name appears only as the SHA-256 of its lower-case form, so the list does not
 publish what it forbids. The script splits every file into tokens
 ([A-Za-z0-9]+), lower-cases them, hashes each one and compares. That finds a
-whole word, not a part of a longer word; the exporter that writes this
-repository checks for parts as well.
+whole word, not a part of a longer word. A name inside a longer token is
+therefore not found; keep names out of commit messages and file names.
 
 A gzip file is read decompressed. A file that is not UTF-8 text is a failure,
 because the script cannot read it.
