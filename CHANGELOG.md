@@ -6,6 +6,57 @@ All notable changes to rolekeeper are documented here. The format follows
 
 The release pipeline checks that `VERSION` has a section here (`## vX.Y.Z`).
 
+## v0.2.0
+
+This repository is now the source of rolekeeper. Before this release it was a
+published copy of code that lived in a private repository; from here on the code,
+the tests and the release tools are edited, reviewed and released here, and pull
+requests are welcome. The applier does not behave differently: the same bundles
+are accepted and refused, and the same objects are applied. The pod's
+configuration, its manifests and its image are as before. The version changes
+because the Go packages moved.
+
+### Changed
+- **The packages are importable.** The `internal/` directory is gone. Other
+  modules can import `github.com/runos-official/rolekeeper/` followed by one of:
+  `applier`, `bundle`, `compile`, `conformance`, `deploy`, `kobj`, `kubeapi`,
+  `reconcile`, `signer`, `signer/jws`, `signer/keys`, `signer/revlog`,
+  `signer/roottrust` and `signer/token`. The API is v0: it may change between
+  minor versions. RunOS imports these packages instead of keeping its own copy.
+- **Test names and test file names changed.** They no longer carry review or
+  tracking ids; they say what they test. A test that you ran by name has a new
+  name. No test was removed.
+- **`compile` no longer says that its projection lives elsewhere.** The package
+  comment now says what the package holds.
+
+### Added
+- **Unit tests for the packages that lost tests in the move.** `compile` (lint,
+  the deny list, `Held`, `ClaimGroups`), `reconcile` (the reconciler against an
+  in-memory cluster, the deny-list safety rules and the kubectl client), `kobj`
+  and `signer` have hand-built tests. Measured coverage with the race detector
+  is `compile` 97.7%, `reconcile` 96.0%, `kobj` 99.2% and `signer` 97.4%.
+- **Coverage floors.** `scripts/coverage-floors.txt` holds the lowest coverage of
+  each package, `scripts/coverage-floors` checks it, and CI and the release
+  checks run it. `make coverage` runs it locally.
+- **Conformance vectors.** `testdata/conformance/vectors.json` is a frozen set
+  of signed bundles, fresh tokens, refusals and a key set, each with the outcome
+  a verifier must reach, made with TEST-ONLY keys. The package `conformance`
+  runs it. `docs/conformance.md` says how the signing side regenerates and runs
+  it.
+- **Public-safety gates for a repository that people push to.** The leak checks
+  now also read commit messages and file names (`scripts/msgcheck.py`), with
+  `commit-msg` and `pre-push` hooks. `scripts/denycheck.py --hash WORD` adds a
+  name to the rules without writing it into the repository.
+- **CI runs on `dev` and `main`.** It runs on every push and pull request to
+  either branch: formatting, `go mod tidy` and `go mod verify`, `go vet`, a
+  build without cgo, the tests with the race detector, the coverage floors,
+  `staticcheck`, `govulncheck`, the leak gates and an image build. The leak gates
+  also run for every other branch.
+
+### Removed
+- **The record of a generating export.** `SOURCE`, `scripts/treehash.py`, the
+  `make sourcecheck` target and the CI and release steps that checked them.
+
 ## v0.1.1
 
 No change to what the binary does. This release adds the way it is released:
