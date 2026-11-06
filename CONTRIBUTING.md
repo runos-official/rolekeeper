@@ -87,8 +87,9 @@ leaves your machine:
 make hooks
 ```
 
-The `pre-commit` hook scans the staged diff and the staged file names. The
-`commit-msg` hook scans the message of the commit that you are making. The
+The `pre-commit` hook scans the staged diff for credentials and internal
+identifiers. The `commit-msg` hook scans the message of the commit that you are
+making, and the names and text of the staged files, with the deny rules. The
 `pre-push` hook runs the whole-tree gates and scans every commit message and
 file name that you are about to push.
 
