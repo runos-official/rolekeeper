@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+#
+# rolekeeper pre-push hook: the checks that leave your machine with the push.
+# A branch on a public remote is public the moment it lands, so run the leak
+# gates over the tree and the commit messages and file names about to be pushed.
+#
+# Install once per clone with:  make hooks
+# Skip in a real emergency with:  git push --no-verify
+# The CI workflows run the same gates and cannot be skipped.
+set -euo pipefail
+
+REMOTE="${1:-origin}"
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+command -v python3 >/dev/null 2>&1 || { echo "pre-push: python3 not found, checks skipped. CI still runs them." >&2; exit 0; }
+
+fail() { printf '\n  PUSH BLOCKED: %s\n\n' "$1" >&2; exit 1; }
+
+python3 scripts/unscannable_check.py >&2 || fail "a tracked file is one leakcheck cannot read"
+python3 scripts/leakcheck.py >&2 || fail "leakcheck found a credential or an internal identifier"
+python3 scripts/denycheck.py >&2 || fail "denycheck found an internal reference"
+if command -v gofmt >/dev/null 2>&1 && [[ -n "$(gofmt -l .)" ]]; then
+  gofmt -l . >&2
+  fail "gofmt lists files: run gofmt -w on them"
+fi
+
+zero="0000000000000000000000000000000000000000"
+while read -r _local_ref local_sha _remote_ref remote_sha; do
+  [[ "$local_sha" == "$zero" ]] && continue   # a branch delete pushes no commit
+  if [[ "$remote_sha" == "$zero" ]]; then
+    range="$local_sha --not --remotes=$REMOTE"  # a new branch: the commits that the remote lacks
+  else
+    range="$remote_sha..$local_sha"
+  fi
+  python3 scripts/msgcheck.py --range "$range" >&2 || fail "a commit message or file name holds text that does not belong in a public repo"
+done
+exit 0

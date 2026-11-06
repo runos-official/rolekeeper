@@ -19,6 +19,10 @@ test: ## Run the tests with the race detector
 vet: ## Run go vet
 	$(GO) vet ./...
 
+.PHONY: fmt-check
+fmt-check: ## Fail when gofmt lists a file
+	@test -z "$$(gofmt -l .)" || { gofmt -l .; echo "run gofmt -w on these files"; exit 1; }
+
 .PHONY: staticcheck
 staticcheck: ## Run staticcheck (go install honnef.co/go/tools/cmd/staticcheck@2026.2.2)
 	staticcheck ./...
@@ -41,9 +45,15 @@ leakcheck: ## Scan every tracked file for credentials and internal identifiers
 leakcheck-staged: ## Scan only the staged diff
 	$(PYTHON) scripts/leakcheck.py --staged
 
+.PHONY: msgcheck
+msgcheck: ## Scan commit messages and file names since origin/dev (RANGE=A..B to choose)
+	$(PYTHON) scripts/msgcheck.py --range $(or $(RANGE),origin/dev..HEAD)
+
 .PHONY: leakcheck-test
-leakcheck-test: ## Test the leak checker itself
+leakcheck-test: ## Test the leak checkers themselves
 	$(PYTHON) scripts/leakcheck_test.py
+	$(PYTHON) scripts/denycheck_test.py
+	$(PYTHON) scripts/msgcheck_test.py
 
 .PHONY: hooks
 hooks: ## Install the tracked git hooks (run once per clone)

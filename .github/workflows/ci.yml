@@ -1,10 +1,13 @@
 name: CI
 
+# Work lands on dev by pull request and main records what shipped, so CI runs
+# on pushes to both and on pull requests into both. A branch that is neither is
+# covered by the Leak gate workflow, which runs on every branch.
 on:
   push:
-    branches: [main]
+    branches: [dev, main]
   pull_request:
-    branches: [main]
+    branches: [dev, main]
 
 permissions:
   contents: read
@@ -21,6 +24,20 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: gofmt lists no file
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "gofmt lists these files; run gofmt -w on them:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go.mod and go.sum are tidy and verified
+        run: |
+          go mod tidy -diff
+          go mod verify
+
       - name: Run go vet
         run: go vet ./...
 
@@ -36,6 +53,12 @@ jobs:
         env:
           CGO_ENABLED: "1"
         run: go test -count=1 -race ./...
+
+  leak-gates:
+    name: Leak gates
+    # The gates live in one workflow, which also runs on its own for every
+    # other branch, so there is one place that can drift.
+    uses: ./.github/workflows/leakcheck.yml
 
   analysis:
     name: staticcheck and govulncheck

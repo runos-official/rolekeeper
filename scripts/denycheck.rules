@@ -1,6 +1,9 @@
 # Rules for scripts/denycheck.py. Edit this file here, by pull request.
 # Patterns are shown as they are. A name is shown only as the SHA-256 of its
 # lower-case form; the script hashes every token of every file and compares.
+# To add a name without typing it into the repository, run
+#   python3 scripts/denycheck.py --hash WORD
+# and add the line that it prints.
 re fpl-number \bFPL\s*\d+
 re fcr-number \bFCR\s*\d+
 re review-id \bR\d+-[A-Z0-9]+(?:-[A-Z0-9]+)?\b

@@ -19,6 +19,8 @@ because the script cannot read it.
 
   denycheck.py              scan every tracked file
   denycheck.py --paths F..  scan the named files
+  denycheck.py --hash WORD  print the rules line for a name, so the name
+                            itself is never written into the repository
 
 Exit codes: 0 clean, 1 findings, 2 usage or environment error.
 """
@@ -106,7 +108,18 @@ def scan(name, data, res, allows, hashes):
     return out
 
 
+def hash_line(word):
+    """Return the rules line for a name: hash plus the SHA-256 of its lower-case form."""
+    return "hash " + hashlib.sha256(word.strip().lower().encode()).hexdigest()
+
+
 def main(argv):
+    if argv[:1] == ["--hash"]:
+        if len(argv) != 2 or not TOKEN.fullmatch(argv[1].strip()):
+            sys.stderr.write("denycheck: --hash takes one word of letters and digits\n")
+            return 2
+        print(hash_line(argv[1]))
+        return 0
     res, paths, allows, hashes = load_rules(RULES)
     if argv[:1] == ["--paths"]:
         files = argv[1:]

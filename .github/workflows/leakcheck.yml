@@ -1,18 +1,28 @@
 name: Leak gate
 
-# Runs on every push and every pull request, on every branch. Nobody can skip
-# it. It stands between a commit and a reader.
+# This is a public repository: a push is public the moment it lands. The gates
+# below stand between a commit and a reader, and nobody can skip them.
 #
-# Three scanners run over the whole tree:
+# Three scanners run over the whole tree, and two more over what a push adds:
 #   leakcheck   credential shapes, machine names, account ids, IP addresses
 #               (the checker that every public RunOS repository carries)
 #   denycheck   internal references: tracking and review ids, internal hosts,
-#               dates, the custody design of keys, and a hashed list of names
+#               dates, the custody design of keys, file names, and a hashed
+#               list of names
+#   msgcheck    the same rules over the commit messages and the names of the
+#               files that the pushed commits add or change
 #   gitleaks    a general secret scanner over the files and the history
+#
+# ci.yml calls this workflow for dev and main and for pull requests into them.
+# On its own it runs for every other branch, so a feature branch is checked
+# before it has a pull request.
 
 on:
   push:
+    branches-ignore: [dev, main]
   pull_request:
+    branches-ignore: [dev, main]
+  workflow_call:
 
 permissions:
   contents: read
@@ -24,7 +34,7 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          # gitleaks reads the history as well.
+          # gitleaks and msgcheck read the history as well.
           fetch-depth: 0
 
       - name: Set up Go
@@ -43,11 +53,37 @@ jobs:
       - name: Every tracked file must be one leakcheck can read
         run: python3 scripts/unscannable_check.py
 
-      - name: Test the checker itself
-        run: python3 scripts/leakcheck_test.py
+      - name: Test the checkers themselves
+        run: |
+          python3 scripts/leakcheck_test.py
+          python3 scripts/denycheck_test.py
+          python3 scripts/msgcheck_test.py
 
       - name: denycheck
         run: python3 scripts/denycheck.py
+
+      # The commits that this event adds: a pull request adds the commits of its
+      # head, a push adds the commits since the previous tip. A new branch or a
+      # rewritten branch has no usable previous tip, so the commits that dev
+      # lacks are read, or only the tip commit when dev is not there.
+      - name: Commit messages and file names (msgcheck)
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ "$EVENT" = "pull_request" ]; then
+            range="${PR_BASE}..${PR_HEAD}"
+          elif [ -n "$BEFORE" ] && git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+            range="${BEFORE}..${GITHUB_SHA}"
+          elif git rev-parse --verify --quiet origin/dev >/dev/null; then
+            range="origin/dev..${GITHUB_SHA}"
+          else
+            range="--max-count=1 ${GITHUB_SHA}"
+          fi
+          echo "msgcheck range: $range"
+          python3 scripts/msgcheck.py --range "$range"
 
       # Pinned to an exact version; Go checks the module against the checksum
       # database.

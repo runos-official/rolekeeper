@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+#
+# rolekeeper commit-msg hook. A commit message and a file name are public text,
+# and the file scanners do not read them. This hook runs the message and the
+# names of the staged files through the same rules.
+#
+# Install once per clone with:  make hooks
+#
+# It is the first line of defence, not the last: the pre-push hook and the CI
+# workflow run the same checks over every commit that is pushed.
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+MSGCHECK="$REPO_ROOT/scripts/msgcheck.py"
+DENYCHECK="$REPO_ROOT/scripts/denycheck.py"
+
+command -v python3 >/dev/null 2>&1 || { echo "commit-msg: python3 not found, message check skipped. CI still runs it." >&2; exit 0; }
+
+if [[ -f "$MSGCHECK" ]]; then
+  python3 "$MSGCHECK" --message-file "$1" >&2 || { echo "  COMMIT BLOCKED: the message holds text that does not belong in a public repo." >&2; exit 1; }
+fi
+
+# The staged files that this commit adds or changes: their names and their text.
+if [[ -f "$DENYCHECK" ]] && [[ -n "$(git diff --cached --name-only --diff-filter=AMC)" ]]; then
+  git diff --cached --name-only --diff-filter=AMC -z | (cd "$REPO_ROOT" && xargs -0 python3 "$DENYCHECK" --paths) >&2 \
+    || { echo "  COMMIT BLOCKED: a staged file holds an internal reference (denycheck)." >&2; exit 1; }
+fi
+exit 0
