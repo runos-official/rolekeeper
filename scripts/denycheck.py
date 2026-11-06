@@ -4,7 +4,8 @@
 leakcheck.py looks for credentials, machine names, account ids and IP
 addresses. denycheck.py looks for the rest: tracking and review ids, internal
 hosts, e-mail addresses, dates of decisions, environment names and the custody
-design of signing keys, and a list of names.
+design of signing keys, and a list of names. It reads the path of every file
+as well as its text, because a file name or a test name can carry an id.
 
 The rules are in scripts/denycheck.rules. A pattern appears there as it is. A
 name appears only as the SHA-256 of its lower-case form, so the list does not
@@ -48,7 +49,7 @@ TOKEN = re.compile(r"[A-Za-z0-9]+")
 
 
 def load_rules(path):
-    res, allows, hashes = [], [], set()
+    res, paths, allows, hashes = [], [], [], set()
     with open(path, encoding="utf-8") as fh:
         for n, raw in enumerate(fh, 1):
             line = raw.strip()
@@ -59,6 +60,9 @@ def load_rules(path):
             if kind == "re":
                 name, _, expr = rest.partition(" ")
                 res.append((name, re.compile(expr.strip(), re.IGNORECASE)))
+            elif kind == "path":
+                name, _, expr = rest.partition(" ")
+                paths.append((name, re.compile(expr.strip(), re.IGNORECASE)))
             elif kind == "allow":
                 allows.append(re.compile("^(?:" + rest + ")$", re.IGNORECASE))
             elif kind == "hash":
@@ -66,7 +70,7 @@ def load_rules(path):
             else:
                 sys.stderr.write("denycheck: %s:%d: unknown rule %r\n" % (path, n, kind))
                 sys.exit(2)
-    return res, allows, hashes
+    return res, paths, allows, hashes
 
 
 def tracked_files():
@@ -76,6 +80,10 @@ def tracked_files():
         sys.stderr.write("denycheck: cannot list tracked files: %s\n" % exc)
         sys.exit(2)
     return [p for p in out.decode("utf-8", "replace").split("\0") if p]
+
+
+def scan_path(rel, paths):
+    return [(rel, 0, pname, m.group(0)) for pname, rx in paths for m in rx.finditer(rel)]
 
 
 def scan(name, data, res, allows, hashes):
@@ -99,7 +107,7 @@ def scan(name, data, res, allows, hashes):
 
 
 def main(argv):
-    res, allows, hashes = load_rules(RULES)
+    res, paths, allows, hashes = load_rules(RULES)
     if argv[:1] == ["--paths"]:
         files = argv[1:]
     elif argv:
@@ -116,6 +124,7 @@ def main(argv):
             continue
         with open(full, "rb") as fh:
             data = fh.read()
+        findings.extend(scan_path(os.path.relpath(full, ROOT).replace(os.sep, "/"), paths))
         name = rel
         if rel.endswith(".gz"):
             try:

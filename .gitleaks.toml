@@ -6,4 +6,4 @@ useDefault = true
 
 [[allowlists]]
 description = "Relay test vectors: tokens signed with a throwaway test key and long expired when they are used; the trust file next to them holds public keys only."
-paths = ['''internal/applier/testdata/relay/''']
+paths = ['''applier/testdata/relay/''']

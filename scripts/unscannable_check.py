@@ -49,7 +49,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ALLOWED: dict[str, str] = {
     # A gzip test vector. It holds the same bytes as body.json next to it, which
     # leakcheck reads, and scripts/denycheck.py reads this file decompressed.
-    "internal/applier/testdata/relay/body.gz": "gzip of body.json, which is scanned",
+    "applier/testdata/relay/body.gz": "gzip of body.json, which is scanned",
 }
 
 

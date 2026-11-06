@@ -24,8 +24,8 @@ ENV CGO_ENABLED=0 GOTOOLCHAIN=local \
 	GONOSUMDB= GONOSUMCHECK= GONOPROXY= GOPRIVATE= GOINSECURE=
 COPY go.mod go.sum ./
 RUN go mod download
-COPY cmd ./cmd
-COPY internal ./internal
+# Every package of the module: .dockerignore leaves out the repository files.
+COPY . .
 ARG VERSION=dev
 ARG TARGETOS=linux
 ARG TARGETARCH

@@ -18,8 +18,12 @@ re environment \brunos-(?:prod|beta|dev)\b|\b(?:in|on|for)\s+(?:the\s+)?prod(?:u
 re operator-decision \boperator(?:'s)?\s+(?:ruling|decision|call|rule)\b
 re iso-date \b20\d\d-\d\d-\d\d\b
 re key-custody (?:^|[^.A-Za-z0-9])(?:AWS|KMS|PKCS\s?#?11|YubiKeys?|HSMs?|Object\s+Lock|SoftHSM)\b
-re test-id \bAT-[A-Z0-9]+-\d+\b|\bSIG-\d+\b|\bR20\b
+re test-id \bAT-[A-Z0-9]+-\d+\b|\bSIG-?\d+\b|\bR20\b
 re internal-path \bproto/|\bscripts/up\.sh|\brun/runos\b|README\.md|\bsigner/(?:jobgrant|intake|receipt|checkpoint|cmd|pkcs11)\b|\brootceremony\b|\bdesign\s+(?:record|sections?|\d)|\bsections?\s+\d+(?:\.\d+)*\b
+re test-name-id \bTest(?:AT_|Rule\d+_|Review\d|[FX]\d{1,2}[a-z]?[A-Z_])
+re note-id \bN-M\d+\b
+re section-number (?:^|[^.0-9])12\.\d\d(?:$|[^.0-9]|\.(?:$|[^0-9]))
+path file-name-id (?:^|/)(?:f\d+[a-z]?|review\d+|x\d\d|rb\d[a-z]?|item\d+)(?:_[^/]*)?\.go$
 allow security@runos\.com
 allow [A-Za-z0-9._%+-]+@example\.(?:com|org|net)
 hash 78c5adca4d421f37a383af78b68e5bd86fe708419bf207cc0d1f40d8b09d9690

@@ -118,6 +118,30 @@ settings. The binary takes no other argument: it reads its configuration from
 the environment, and the full list of variables is at the top of
 [cmd/rolekeeper/main.go](cmd/rolekeeper/main.go).
 
+## Go packages
+
+The module `github.com/runos-official/rolekeeper` is a library as well as a binary: RunOS imports its
+packages. They sit at the top level of the module, with no `internal`
+directory, so any module can import them. The API is **v0**: the packages are
+shared with RunOS and may change between minor versions.
+
+| Package | What it holds |
+|---|---|
+| `applier` | The loop of the pod: reads the bundle, verifies it, applies it, reports status, and runs the retire fail-safe |
+| `bundle` | The signed bundle envelope, its content digest, the verifier, the version floor and the relay tokens |
+| `compile` | The Kubernetes objects of RunOS access (roles, bindings, labels, the deny list) and the lint that checks them |
+| `deploy` | The reference manifests (`relay.yaml`, `cilium.yaml`, `deny-policy.json`), embedded as bytes |
+| `kobj` | The small Kubernetes object model and the RunOS label keys |
+| `kubeapi` | A minimal Kubernetes API client |
+| `reconcile` | Applies objects with server-side apply and repairs drift |
+| `signer` | The signing purposes, token lifetimes and the custody backend interface |
+| `signer/jws` | Compact JWS with a strict header policy |
+| `signer/keys` | The per-purpose key sets: rotation, root-signed reset, the verifier's view |
+| `signer/revlog` | The hash-chained revocation log |
+| `signer/roottrust` | The offline root pins, the handover chain and the baked-in floors |
+| `signer/token` | Token issue and verification |
+| `cmd/rolekeeper` | The binary |
+
 ## Where this code comes from
 
 This repository is **generated** from the RunOS source tree. The file

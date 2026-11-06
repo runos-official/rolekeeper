@@ -63,11 +63,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/runos-official/rolekeeper/internal/applier"
-	"github.com/runos-official/rolekeeper/internal/bundle"
-	"github.com/runos-official/rolekeeper/internal/kobj"
-	"github.com/runos-official/rolekeeper/internal/kubeapi"
-	"github.com/runos-official/rolekeeper/internal/reconcile"
+	"github.com/runos-official/rolekeeper/applier"
+	"github.com/runos-official/rolekeeper/bundle"
+	"github.com/runos-official/rolekeeper/kobj"
+	"github.com/runos-official/rolekeeper/kubeapi"
+	"github.com/runos-official/rolekeeper/reconcile"
 )
 
 // version is set at build time (-X main.version).
