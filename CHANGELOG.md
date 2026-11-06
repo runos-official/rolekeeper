@@ -6,6 +6,20 @@ All notable changes to rolekeeper are documented here. The format follows
 
 The release pipeline checks that `VERSION` has a section here (`## vX.Y.Z`).
 
+## v0.1.1
+
+No change to what the binary does. This release adds the way it is released:
+a candidate (`vX.Y.Z-rc.N`) and its final are cut from the same commit by a
+release pipeline that runs the checks first, and the image digest, platforms
+and attestation are read back and verified.
+
+### Added
+- **Release candidates.** The release workflow accepts `vX.Y.Z-rc.N` tags and
+  builds the same multi-architecture, attested image for them.
+- **Release checks.** `scripts/release-check.sh` runs every gate without a side
+  effect before a tag is cut. `scripts/image-digest.sh` reads the digest and
+  platforms of a published image back from the registry.
+
 ## v0.1.0
 
 First public release. rolekeeper is the in-cluster component that keeps

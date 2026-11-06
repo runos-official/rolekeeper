@@ -37,14 +37,20 @@ jobs:
       - name: Check the tag against VERSION and the source record
         id: version
         run: |
-          version="${GITHUB_REF_NAME#v}"
-          [ "$version" = "$(cat VERSION)" ] || { echo "tag $GITHUB_REF_NAME does not match VERSION $(cat VERSION)"; exit 1; }
-          grep -q "^## v${version}\$" CHANGELOG.md || { echo "CHANGELOG.md has no section for v${version}"; exit 1; }
+          # A tag is v<base> for a final or v<base>-rc.<n> for a release
+          # candidate. VERSION holds the base, so a candidate and its final are
+          # built from one commit. The image carries the whole tag version.
+          tag="$GITHUB_REF_NAME"
+          [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$ ]] || { echo "tag $tag must look like v1.2.3 or v1.2.3-rc.1"; exit 1; }
+          version="${tag#v}"
+          base="${version%%-*}"
+          [ "$base" = "$(cat VERSION)" ] || { echo "tag $tag does not match VERSION $(cat VERSION)"; exit 1; }
+          grep -q "^## v${base}\$" CHANGELOG.md || { echo "CHANGELOG.md has no section for v${base}"; exit 1; }
           python3 scripts/treehash.py --check
           echo "version=${version}" >> "$GITHUB_OUTPUT"
-          # A semver pre-release suffix (-rc.1) is published and pinnable by
-          # exact version but never tagged latest.
-          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+          # A release candidate (-rc.1) is published and pinnable by exact
+          # version but never tagged latest.
+          if [[ "$tag" == *-* ]]; then
             echo "prerelease=true" >> "$GITHUB_OUTPUT"
           else
             echo "prerelease=false" >> "$GITHUB_OUTPUT"

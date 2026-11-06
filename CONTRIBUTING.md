@@ -63,8 +63,32 @@ make hooks
 
 ## Releasing
 
-Only the RunOS team releases. A release is a `v<version>` tag on `main`. The
-workflow checks that the tag equals `VERSION`, that `CHANGELOG.md` has a section
-for it and that the files match `SOURCE`. Then it builds and pushes
+Only the RunOS team releases. The release tool stays in the open: you can read
+every step and every check.
+
+A release starts as a regeneration from the RunOS source. The new export lands
+on the `dev` branch. `main` stays as it is until the team has checked the
+release and fast-forwards it.
+
+Run the gates without any side effect:
+
+```sh
+scripts/release-check.sh v1.2.3-rc.1
+```
+
+A tag has the form `v<version>` for a final release and `v<version>-rc.<n>` for
+a release candidate. `VERSION` holds the base version, so a candidate and its
+final come from one commit. The final must be cut from the commit that a
+candidate shipped.
+
+The tag starts the release workflow. The workflow checks the tag against
+`VERSION`, checks that `CHANGELOG.md` has a section for the base version and
+that the files match `SOURCE`. Then it builds and pushes
 `ghcr.io/runos-official/rolekeeper` for linux/amd64 and linux/arm64 and
-attests the image.
+attests the image. A candidate is never tagged `latest`.
+
+Read the digest of a published tag from the registry with:
+
+```sh
+scripts/image-digest.sh 1.2.3
+```

@@ -1,7 +1,7 @@
 # rolekeeper is generated from the RunOS source. Do not edit by hand.
 # Recompute the tree hash with: python3 scripts/treehash.py
 source: roid
-commit: 1575fe0b932b4e491b18915b50b22ea63d88b388
-tree-sha256: 4b2885c8fbbca653f27fb86890bb49599297ff6c7009954435d06ddcf3055e14
-files: 399
-exporter: 1
+commit: 6f2e143bf1f2d793c8c466eb0293e3d33410c2b6
+tree-sha256: 88ef104d3366f09592283e00a2547bdbce25d42aacc22addf6a399d68ac8caf8
+files: 405
+exporter: 3

@@ -1,0 +1,219 @@
+# The rolekeeper release pipeline. One file serves both stages: the dev target
+# cuts a release candidate (v1.2.3-rc.1) and the prod target cuts the final
+# (v1.2.3) from the commit that a candidate shipped.
+#
+# GitHub Actions builds and publishes the image, so the public can read the
+# whole process. This pipeline runs the repository's own gates, tags, pushes,
+# watches the workflow that the tag starts and then checks what the workflow
+# published: the tag, the digest, both platforms and the attestation. It
+# builds and pushes no image itself and it touches no cluster. Customer
+# clusters pull the image on a RunOS applier install, so this release only
+# publishes a version and a digest to pin.
+#
+# The gates are not copied here. scripts/release-check.sh holds them all, so
+# there is one place that can drift. This repository is generated from the
+# RunOS source: a change to a file goes into the source and arrives in the next
+# export. Do not edit the files here.
+#
+# gh authenticates from the host keyring, so no credential is injected.
+#
+# Reporting. The steps report to Foreman in its structured form (the lines
+# "::foreman:: key=value" and "::foreman-summary:: sentence", printed by
+# scripts/foreman-observe.sh). A step lists the facts that it must print in
+# expect and says what the reader should check in observe. Foreman never fails
+# a step for a missing fact, so every gate stays a plain exit code. The last
+# step collects evidence, runs after a failure too, and prints data only.
+#
+# Both targets integrate on dev and record on deployed. The final comes from
+# the commit that a candidate shipped and deployed records, so dev must not
+# move between the candidate and the final. A correction means a new candidate.
+# main is never touched here.
+
+name: Release rolekeeper
+description: Run the repository gates, tag and push, watch the GitHub Actions release, then read the image back from the registry and verify its attestation.
+kind: github_release
+
+steps:
+  - name: Version and target agree
+    description: "A dev target takes a release candidate (vX.Y.Z-rc.N). A prod target takes a final version (vX.Y.Z). Both need the leading v. The target integrates on dev and records on deployed."
+    run: |
+      version="${{ version }}"
+      printf '%s' "$version" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$' || {
+        echo "version $version must look like v1.2.3 or v1.2.3-rc.1, with the leading v"
+        exit 1
+      }
+      case "${{ target.env }}" in
+        prod)
+          case "$version" in
+            *-*) echo "this target takes a final version such as v1.0.0, not $version"; exit 1 ;;
+          esac ;;
+        dev)
+          case "$version" in
+            *-rc.*) ;;
+            *) echo "dev takes a release candidate such as v1.0.0-rc.1, not $version"; exit 1 ;;
+          esac ;;
+        *) echo "unknown target env: ${{ target.env }}"; exit 1 ;;
+      esac
+      test "${{ target.branch }}" = "dev" || { echo "this target integrates on ${{ target.branch }}, but rolekeeper integrates on dev"; exit 1; }
+      test "${{ target.deployed_branch }}" = "deployed" || { echo "this target records on ${{ target.deployed_branch }}, but rolekeeper records on deployed"; exit 1; }
+      echo "$version on a ${{ target.env }} target"
+    timeout: 60
+
+  - name: Check out the integration branch
+    description: "Fetch, switch to dev and fast-forward only. A local dev with commits that origin lacks stops the run."
+    run: |
+      git fetch --quiet --tags origin ${{ target.branch }}
+      git checkout --quiet ${{ target.branch }}
+      git merge --quiet --ff-only origin/${{ target.branch }} || {
+        echo "local ${{ target.branch }} cannot fast-forward to origin/${{ target.branch }}"
+        exit 1
+      }
+      test "$(git rev-parse HEAD)" = "$(git rev-parse origin/${{ target.branch }})" || {
+        echo "local ${{ target.branch }} has commits that origin/${{ target.branch }} lacks: push or drop them first"
+        exit 1
+      }
+      echo "on ${{ target.branch }} at $(git rev-parse --short HEAD)"
+    timeout: 120
+
+  - name: Final comes from the validated candidate
+    description: "A final (no -rc) must be cut from the exact commit that shipped as a release candidate and that deployed records. If dev moved on, the final would carry code that no candidate checked. A candidate passes through."
+    run: |
+      version="${{ version }}"
+      case "$version" in
+        *-*) echo "$version is a release candidate: nothing to check"; exit 0 ;;
+      esac
+      branch="${{ target.branch }}"
+      record="${{ target.deployed_branch }}"
+      git fetch --quiet --tags origin
+      tip="$(git ls-remote origin "refs/heads/$branch" | cut -f1)"
+      recorded="$(git ls-remote origin "refs/heads/$record" | cut -f1)"
+      test -n "$tip" || { echo "cannot read $branch on origin"; exit 1; }
+      test -n "$recorded" || { echo "$record does not exist on origin: no release candidate has shipped yet. Cut a candidate from $branch first."; exit 1; }
+      test "$recorded" = "$tip" || {
+        echo "$record on origin is at $recorded, but $branch is at $tip."
+        echo "$version must be cut from the commit that a release candidate shipped. Cut a new candidate from $branch, check it, then release that."
+        exit 1
+      }
+      found=""
+      for tag in $(git tag --list "${version}-rc.*"); do
+        if [ "$(git rev-parse "$tag^{commit}")" = "$tip" ]; then found="$tag"; fi
+      done
+      test -n "$found" || {
+        echo "no candidate tag ${version}-rc.N points at $tip, the tip of $branch."
+        echo "Cut a new candidate from $branch, check it, then release that."
+        exit 1
+      }
+      echo "$version will be cut from $tip, the commit that $found shipped and $record records"
+    timeout: 120
+
+  - name: Gate chain
+    description: "scripts/release-check.sh: VERSION and CHANGELOG, the tag is free, the files match SOURCE, the leak gates, gofmt, build, vet and the race tests. Every gate and no side effect."
+    run: RELEASE_BRANCH="${{ target.branch }}" RELEASE_RECORD_BRANCH="${{ target.deployed_branch }}" scripts/release-check.sh "${{ version }}"
+    expect: [version, previous_commit, new_commit]
+    observe: new_commit must be the tip of the integration branch. previous_commit is the commit that the record branch holds before this release, and for a final it equals new_commit.
+    timeout: 3600
+
+  - name: Tag and push
+    description: "Tags dev and pushes the branch and the tag. The tag starts the release workflow. main is never touched here."
+    run: |
+      set -e
+      . scripts/foreman-observe.sh
+      git checkout --quiet ${{ target.branch }}
+      sha="$(git rev-parse --short HEAD)"
+      previous="$(git ls-remote origin "refs/heads/${{ target.deployed_branch }}" | cut -c1-12)"
+      git tag "${{ version }}"
+      git push --quiet origin ${{ target.branch }}
+      git push --quiet origin "${{ version }}"
+      echo "tagged ${{ version }} at $sha and pushed"
+      fm_fact version "${{ version }}"
+      fm_fact previous_commit "${previous:-none}"
+      fm_fact new_commit "$(git rev-parse --short=12 HEAD)"
+      fm_summary "tagged ${{ version }} at $sha and pushed the tag"
+    expect: [version, previous_commit, new_commit]
+    observe: new_commit must be the commit that the gate chain checked.
+    timeout: 120
+
+  - name: Wait for the release workflow
+    description: "GitHub builds and pushes the image. Poll for the run that the tag started, then block on it. A failed workflow fails the release."
+    run: |
+      . scripts/foreman-observe.sh
+      run_id=""; waited=0
+      while [ -z "$run_id" ] && [ "$waited" -lt 180 ]; do
+        run_id="$(gh run list --workflow=release.yml --limit 15 \
+          --json databaseId,headBranch,event \
+          -q "[.[] | select(.headBranch==\"${{ version }}\" and .event==\"push\")][0].databaseId" 2>/dev/null || true)"
+        [ -n "$run_id" ] && break
+        sleep 10; waited=$((waited + 10))
+      done
+      test -n "$run_id" || { echo "no release run found for ${{ version }}"; fm_summary "no release run started for ${{ version }}"; exit 1; }
+      echo "watching run $run_id"
+      url="$(gh run view "$run_id" --json url -q .url 2>/dev/null || true)"
+      fm_fact run_id "$run_id"
+      fm_fact workflow_run_url "${url:-unavailable}"
+      rc=0
+      gh run watch "$run_id" --exit-status >/dev/null 2>&1 || rc=$?
+      conclusion="$(gh run view "$run_id" --json conclusion -q '.conclusion // "none"' 2>/dev/null || true)"
+      fm_fact conclusion "${conclusion:-unavailable}"
+      if [ "$rc" -ne 0 ]; then
+        echo "release workflow $run_id failed (gh run view $run_id --log-failed)"
+        fm_summary "release workflow $run_id for ${{ version }} did not succeed"
+        exit 1
+      fi
+      echo "release workflow succeeded"
+      fm_summary "release workflow $run_id for ${{ version }} succeeded"
+    expect: [run_id, workflow_run_url, conclusion]
+    observe: workflow_run_url is the run that the public sees in GitHub Actions. conclusion must be success.
+    timeout: 3600
+
+  - name: Read the image back from the registry
+    description: "Asks the public registry for the tag, recomputes the digest from the manifest bytes and lists the platforms. Fails when linux/amd64 or linux/arm64 is missing. The printed digest line is the value to pin."
+    run: bash scripts/image-digest.sh "${{ version }}"
+    expect: [image, digest, platforms, version]
+    observe: The digest line is the value to pin in the applier settings. The platforms line must hold linux/amd64 and linux/arm64.
+    timeout: 120
+
+  - name: Verify the published attestation
+    description: "Proves that the digest in the registry was built by this repository's release workflow at this tag. It binds the signer identity, not only the signature."
+    run: |
+      . scripts/foreman-observe.sh
+      ref="$(bash scripts/image-digest.sh "${{ version }}" | sed -n 's/^reference: //p')"
+      digest="${ref#*@}"
+      nwo="$(gh api repos/{owner}/{repo} --jq .full_name)"
+      expected="https://github.com/$nwo/.github/workflows/release.yml@refs/tags/${{ version }}"
+      actual="$(gh attestation verify "oci://ghcr.io/runos-official/rolekeeper@$digest" --repo "$nwo" --format json 2>/dev/null \
+        | python3 -c "import json,sys; d=json.load(sys.stdin); print(d[0]['verificationResult']['signature']['certificate'].get('subjectAlternativeName',''))" 2>/dev/null || true)"
+      fm_fact digest "$digest"
+      test -n "$actual" || { echo "attestation check returned no signer identity for $digest"; fm_fact attestation unavailable; fm_summary "no attestation signer for $digest"; exit 1; }
+      fm_fact attestation_signer "$actual"
+      test "$actual" = "$expected" || { echo "attestation identity mismatch: expected $expected, got $actual"; fm_fact attestation mismatch; fm_summary "attestation signer mismatch for $digest"; exit 1; }
+      echo "attestation for $digest bound to $actual"
+      fm_fact attestation verified
+      fm_summary "attestation for $digest bound to the release workflow at ${{ version }}"
+    expect: [digest, attestation_signer, attestation]
+    observe: attestation_signer must be this repository's release workflow at the tag. digest must be the one that the previous step printed.
+    timeout: 300
+
+  - name: Advance the deployed branch
+    description: "The record of what has shipped. Moved only now, on success. The final reads it as the commit that a candidate shipped."
+    run: |
+      set -e
+      . scripts/foreman-observe.sh
+      record="${{ target.deployed_branch }}"
+      previous="$(git ls-remote origin "refs/heads/$record" | cut -c1-12)"
+      git branch -f "$record" ${{ target.branch }}
+      git push --quiet origin "$record"
+      echo "$record now at $(git rev-parse --short "$record")"
+      fm_fact previous_commit "${previous:-none}"
+      fm_fact new_commit "$(git rev-parse --short=12 "$record")"
+      fm_summary "$record moved from ${previous:-none} to $(git rev-parse --short=12 "$record")"
+    expect: [previous_commit, new_commit]
+    observe: new_commit must be the commit of the tag that was just pushed.
+    timeout: 120
+
+  - name: Collect evidence
+    description: "Prints what the release left behind: the tag commits, the SOURCE record, the workflow run with every job and step conclusion, and the registry digest and platforms. It only reads and prints no verdict."
+    always: true
+    run: bash scripts/release-evidence.sh "${{ version }}" "${{ run_dir }}/evidence.txt"
+    expect: [workflow_run_url, conclusion, digest, platforms, evidence]
+    observe: Read the workflow conclusion, the digest and the platforms yourself. The step prints no verdict and runs after a failure.
+    timeout: 180
