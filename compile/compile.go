@@ -244,7 +244,7 @@ func itoa(v uint64) string {
 var SystemNamespaces = []string{"kube-system", "kube-public", "kube-node-lease", "default", "runos", "local-path-storage", ApplierNamespace}
 
 // ApplierNamespace is the namespace of the in-cluster applier
-// (k8s/deploy/roid-k8s-applier.yaml). It holds the version floor and the
+// (deploy/relay.yaml). It holds the version floor and the
 // canary writes.
 const ApplierNamespace = "roid-k8s-applier"
 
