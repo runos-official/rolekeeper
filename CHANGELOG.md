@@ -6,7 +6,7 @@ All notable changes to rolekeeper are documented here. The format follows
 
 The release pipeline checks that `VERSION` has a section here (`## vX.Y.Z`).
 
-## Unreleased
+## v0.2.1
 
 ### Security
 - **The pod patches only its own admission objects.** Before, the ClusterRole
