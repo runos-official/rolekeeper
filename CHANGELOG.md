@@ -6,7 +6,7 @@ All notable changes to rolekeeper are documented here. The format follows
 
 The release pipeline checks that `VERSION` has a section here (`## vX.Y.Z`).
 
-## Unreleased
+## v0.2.1
 
 ### Security
 - **The repair of the deny policy removes what someone else added.** Before,
@@ -24,10 +24,6 @@ The release pipeline checks that `VERSION` has a section here (`## vX.Y.Z`).
   match condition, an `Audit` action on the binding and a hand-added deny
   list key are all gone after one repair, and a person on the list is cut
   again.
-
-## v0.2.1
-
-### Security
 - **The pod patches only its own admission objects.** Before, the ClusterRole
   `roid-k8s-applier` in `deploy/relay.yaml` let the pod patch every
   ValidatingAdmissionPolicy and ValidatingAdmissionPolicyBinding on the
