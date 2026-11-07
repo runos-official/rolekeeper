@@ -394,7 +394,11 @@ func (c *Client) Create(ctx context.Context, o kobj.Object) error {
 }
 
 // Replace writes the object with a server-side apply. For a Namespace it
-// merges the RunOS labels only.
+// merges the RunOS labels only. For the deny policy, its binding and the
+// deny list a JSON patch then sets the whole spec or data
+// (kobj.ExactPatch): the apply alone keeps a list entry that another field
+// manager added. Both requests use the patch verb, the one verb the
+// applier holds on these objects.
 func (c *Client) Replace(ctx context.Context, o kobj.Object) error {
 	if o.Kind == kobj.KindNamespace {
 		p, err := object(o.Kind, "", o.Name)
@@ -405,7 +409,19 @@ func (c *Client) Replace(ctx context.Context, o kobj.Object) error {
 		_, err = c.do(ctx, http.MethodPatch, p, nil, "application/merge-patch+json", patch)
 		return err
 	}
-	return c.apply(ctx, o)
+	if err := c.apply(ctx, o); err != nil {
+		return err
+	}
+	exact, ok := o.ExactPatch()
+	if !ok {
+		return nil
+	}
+	p, err := object(o.Kind, o.Namespace, o.Name)
+	if err != nil {
+		return err
+	}
+	_, err = c.do(ctx, http.MethodPatch, p, url.Values{"fieldManager": {c.cfg.FieldManager}}, "application/json-patch+json", exact)
+	return err
 }
 
 // Delete removes an object; a missing one is not an error. It refuses the

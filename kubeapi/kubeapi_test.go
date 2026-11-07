@@ -264,3 +264,83 @@ func TestPathChangingNamesAreRefused(t *testing.T) {
 		t.Fatalf("requests sent: %+v", f.calls)
 	}
 }
+
+// A server-side apply keeps a list entry that another field manager added,
+// so a hand-added match condition could switch the deny policy off for
+// good. A replace of the deny policy, its binding or the deny list is the
+// apply (labels) and then a JSON patch of the whole spec or data, with the
+// applier's field manager. Both are the patch verb, the one the applier
+// holds on these objects.
+func TestReplaceOfTheDenyObjectsSetsTheWholeSpec(t *testing.T) {
+	cases := []struct {
+		o    kobj.Object
+		path string
+		ops  string
+	}{
+		{kobj.Object{Kind: kobj.KindVAP, Name: compile.DenyPolicyName,
+			Spec: map[string]any{"matchConditions": []any{map[string]any{"name": "runos-person", "expression": "true"}}}},
+			"/apis/admissionregistration.k8s.io/v1/validatingadmissionpolicies/runos-deny-writes",
+			`[{"op":"add","path":"/spec","value":{"matchConditions":[{"expression":"true","name":"runos-person"}]}}]`},
+		{kobj.Object{Kind: kobj.KindVAPBinding, Name: compile.DenyPolicyName,
+			Spec: map[string]any{"validationActions": []any{"Deny"}}},
+			"/apis/admissionregistration.k8s.io/v1/validatingadmissionpolicybindings/runos-deny-writes",
+			`[{"op":"add","path":"/spec","value":{"validationActions":["Deny"]}}]`},
+		{kobj.Object{Kind: kobj.KindConfigMap, Namespace: compile.DenyNamespace, Name: compile.DenyPolicyName,
+			Data: map[string]string{"p1": "x"}},
+			"/api/v1/namespaces/runos/configmaps/runos-deny-writes",
+			`[{"op":"add","path":"/data","value":{"p1":"x"}},{"op":"add","path":"/binaryData","value":{}}]`},
+	}
+	for _, tc := range cases {
+		f := &fakeAPI{}
+		c, _ := newClient(t, f)
+		if err := c.Replace(context.Background(), tc.o); err != nil {
+			t.Fatal(err)
+		}
+		if len(f.calls) != 2 {
+			t.Fatalf("%s: %d requests, want the apply and the exact patch", tc.o.Key(), len(f.calls))
+		}
+		apply, exact := f.calls[0], f.calls[1]
+		if apply.ContentType != "application/apply-patch+yaml" || apply.Path != tc.path {
+			t.Fatalf("%s: first request %s %s", tc.o.Key(), apply.ContentType, apply.Path)
+		}
+		if exact.Method != http.MethodPatch || exact.Path != tc.path || exact.ContentType != "application/json-patch+json" {
+			t.Fatalf("%s: second request %s %s %s", tc.o.Key(), exact.Method, exact.Path, exact.ContentType)
+		}
+		if exact.Query != "fieldManager=roid-k8s-applier" {
+			t.Fatalf("%s: query %q", tc.o.Key(), exact.Query)
+		}
+		if string(exact.Body) != tc.ops {
+			t.Fatalf("%s: body %s, want %s", tc.o.Key(), exact.Body, tc.ops)
+		}
+	}
+}
+
+// Create of an object that does not exist stays one apply: there is no
+// foreign entry to remove, and the applier may not create the deny policy.
+// A RoleBinding replace stays one apply: subjects is an atomic list.
+func TestCreateAndRBACReplaceStayOneApply(t *testing.T) {
+	f := &fakeAPI{}
+	c, _ := newClient(t, f)
+	if err := c.Create(context.Background(), kobj.Object{Kind: kobj.KindConfigMap, Namespace: compile.DenyNamespace, Name: compile.DenyPolicyName}); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Replace(context.Background(), kobj.Object{Kind: kobj.KindRoleBinding, Namespace: "apps", Name: "b"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.calls) != 2 || f.calls[0].ContentType != "application/apply-patch+yaml" || f.calls[1].ContentType != "application/apply-patch+yaml" {
+		t.Fatalf("requests %+v", f.calls)
+	}
+}
+
+// When the apply fails, no exact patch follows it.
+func TestNoExactPatchAfterAFailedApply(t *testing.T) {
+	p := "/apis/admissionregistration.k8s.io/v1/validatingadmissionpolicies/runos-deny-writes"
+	f := &fakeAPI{code: map[string]int{"PATCH " + p: 403}}
+	c, _ := newClient(t, f)
+	if err := c.Replace(context.Background(), kobj.Object{Kind: kobj.KindVAP, Name: compile.DenyPolicyName}); err == nil {
+		t.Fatal("a refused apply was taken as success")
+	}
+	if len(f.calls) != 1 {
+		t.Fatalf("%d requests", len(f.calls))
+	}
+}

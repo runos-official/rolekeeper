@@ -144,6 +144,45 @@ func (o Object) JSON() []byte {
 	return b
 }
 
+// ExactPatch is a JSON patch (RFC 6902) that sets the fields RunOS owns
+// whole: the spec of a ValidatingAdmissionPolicy or its binding, and the
+// data and binaryData of a ConfigMap. A server-side apply cannot do this
+// alone. It removes only the list entries and map keys that its own field
+// manager owned, so an entry that another manager added stays (a
+// hand-added match condition that reads false switches the deny policy
+// off). The "add" operation replaces a member that exists. ok=false for
+// the other kinds: RBAC rules and subjects are atomic lists, which the
+// apply replaces whole, and RunOS owns only its labels on a Namespace.
+func (o Object) ExactPatch() (patch []byte, ok bool) {
+	type op struct {
+		Op    string `json:"op"`
+		Path  string `json:"path"`
+		Value any    `json:"value"`
+	}
+	var ops []op
+	switch o.Kind {
+	case KindVAP, KindVAPBinding:
+		spec := o.Spec
+		if spec == nil {
+			spec = map[string]any{}
+		}
+		ops = []op{{"add", "/spec", spec}}
+	case KindConfigMap:
+		data, bin := o.Data, o.BinaryData
+		if data == nil {
+			data = map[string]string{}
+		}
+		if bin == nil {
+			bin = map[string][]byte{}
+		}
+		ops = []op{{"add", "/data", data}, {"add", "/binaryData", bin}}
+	default:
+		return nil, false
+	}
+	b, _ := json.Marshal(ops)
+	return b, true
+}
+
 // List renders objects as one v1 List, for one kubectl call.
 func List(objs []Object) []byte {
 	items := make([]map[string]any, 0, len(objs))

@@ -91,12 +91,15 @@ func (k Kubectl) Exec(ctx context.Context, stdin []byte, args ...string) ([]byte
 	return k.run(ctx, stdin, args...)
 }
 
-func (k Kubectl) apply(ctx context.Context, o kobj.Object) error {
-	fm := k.FieldManager
-	if fm == "" {
-		fm = "roid"
+func (k Kubectl) fieldManager() string {
+	if k.FieldManager == "" {
+		return "roid"
 	}
-	_, err := k.run(ctx, o.JSON(), "apply", "--server-side", "--field-manager="+fm, "--force-conflicts", "-f", "-")
+	return k.FieldManager
+}
+
+func (k Kubectl) apply(ctx context.Context, o kobj.Object) error {
+	_, err := k.run(ctx, o.JSON(), "apply", "--server-side", "--field-manager="+k.fieldManager(), "--force-conflicts", "-f", "-")
 	return err
 }
 
@@ -115,7 +118,18 @@ func (k Kubectl) Replace(ctx context.Context, o kobj.Object) error {
 		return err
 	}
 	if k.ServerSide {
-		return k.apply(ctx, o)
+		if err := k.apply(ctx, o); err != nil {
+			return err
+		}
+		// The apply keeps a list entry that another field manager added;
+		// the JSON patch sets the whole spec or data (kobj.ExactPatch).
+		exact, ok := o.ExactPatch()
+		if !ok {
+			return nil
+		}
+		_, err := k.run(ctx, nil, append(nsArgs(o.Namespace), "patch", resource(o.Kind), o.Name,
+			"--type=json", "--field-manager="+k.fieldManager(), "-p", string(exact))...)
+		return err
 	}
 	_, err := k.run(ctx, o.JSON(), "replace", "-f", "-")
 	return err

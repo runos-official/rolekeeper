@@ -88,3 +88,35 @@ func TestKubectlNeverDeletesTheDenyPolicy(t *testing.T) {
 		t.Fatalf("kubectl ran: %s", raw)
 	}
 }
+
+// With ServerSide set, a replace of the deny policy is the apply and then a
+// JSON patch of the whole spec, so a list entry that another field manager
+// added does not survive the repair.
+func TestServerSideReplaceOfTheDenyPolicySetsTheWholeSpec(t *testing.T) {
+	bin, args := fakeKubectl(t)
+	k := Kubectl{Bin: bin, ServerSide: true, FieldManager: "roid-k8s-applier"}
+	o := kobj.Object{Kind: kobj.KindVAP, Name: compile.DenyPolicyName, Spec: map[string]any{"failurePolicy": "Fail"}}
+	if err := k.Replace(context.Background(), o); err != nil {
+		t.Fatal(err)
+	}
+	cm := kobj.Object{Kind: kobj.KindConfigMap, Namespace: compile.DenyNamespace, Name: compile.DenyPolicyName}
+	if err := k.Replace(context.Background(), cm); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(args)
+	lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
+	if len(lines) != 4 {
+		t.Fatalf("calls: %q", lines)
+	}
+	want := []string{
+		"apply --server-side --field-manager=roid-k8s-applier --force-conflicts -f -",
+		`patch validatingadmissionpolicies.admissionregistration.k8s.io runos-deny-writes --type=json --field-manager=roid-k8s-applier -p [{"op":"add","path":"/spec","value":{"failurePolicy":"Fail"}}]`,
+		"apply --server-side --field-manager=roid-k8s-applier --force-conflicts -f -",
+		`-n runos patch configmaps runos-deny-writes --type=json --field-manager=roid-k8s-applier -p [{"op":"add","path":"/data","value":{}},{"op":"add","path":"/binaryData","value":{}}]`,
+	}
+	for i, w := range want {
+		if !strings.Contains(lines[i], w) {
+			t.Fatalf("call %d: %q, want %q", i, lines[i], w)
+		}
+	}
+}

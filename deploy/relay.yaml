@@ -90,6 +90,8 @@ rules:
   # applier cannot change any other admission policy or binding, such as a
   # guard that the installer puts in front of the applier's own writes.
   # Kubernetes cannot limit list to a name, so get and list stay wide.
+  # The repair is a server-side apply and then a JSON patch of the whole
+  # spec, which removes an entry that someone else added. Both are patch.
   - apiGroups: ["admissionregistration.k8s.io"]
     resources: ["validatingadmissionpolicies", "validatingadmissionpolicybindings"]
     verbs: ["get", "list"]

@@ -6,6 +6,25 @@ All notable changes to rolekeeper are documented here. The format follows
 
 The release pipeline checks that `VERSION` has a section here (`## vX.Y.Z`).
 
+## Unreleased
+
+### Security
+- **The repair of the deny policy removes what someone else added.** Before,
+  the applier repaired the deny policy, its binding and the deny list with a
+  server-side apply alone. A server-side apply removes only the list entries
+  and map keys that its own field manager wrote. An entry that someone else
+  added stayed. For example, a match condition that reads `false`, added to
+  the policy by hand, switched the deny list off, and every repair left it
+  there. Now the repair of these three objects is the apply and then a JSON
+  patch that sets the whole `spec` (policy, binding) or the whole `data` and
+  `binaryData` (deny list). The applier's RBAC does not change: both
+  requests use the patch verb on `runos-deny-writes` only. The lab client
+  (`reconcile.Kubectl` with `ServerSide`) does the same. Measured against a
+  local kube-apiserver v1.34.1 with the `deploy/relay.yaml` RBAC: a hand-added
+  match condition, an `Audit` action on the binding and a hand-added deny
+  list key are all gone after one repair, and a person on the list is cut
+  again.
+
 ## v0.2.1
 
 ### Security
