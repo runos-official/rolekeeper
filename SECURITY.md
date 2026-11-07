@@ -38,8 +38,10 @@ can make it act.
 ### What a compromise of the pod would give
 
 The pod's ClusterRole is narrow on purpose (see [deploy/relay.yaml](deploy/relay.yaml)).
-It reads and writes ClusterRoles and RoleBindings, patches namespaces and the
-two admission policy objects, and impersonates two reserved canary users. It
+It reads and writes ClusterRoles and RoleBindings, patches namespaces, and
+impersonates two reserved canary users. It reads every admission policy and
+binding but patches only its own two, by name (`runos-deny-writes`): it cannot
+change any other admission policy on the cluster. It
 can bind and escalate only the five RunOS roles. It has no access to Secrets or
 pods, and a network policy limits it to the API server and DNS. The admission
 policy that implements the deny list matches people (user names that start with

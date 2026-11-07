@@ -6,6 +6,20 @@ All notable changes to rolekeeper are documented here. The format follows
 
 The release pipeline checks that `VERSION` has a section here (`## vX.Y.Z`).
 
+## Unreleased
+
+### Security
+- **The pod patches only its own admission objects.** Before, the ClusterRole
+  `roid-k8s-applier` in `deploy/relay.yaml` let the pod patch every
+  ValidatingAdmissionPolicy and ValidatingAdmissionPolicyBinding on the
+  cluster. A pod that was taken over could then switch off any admission
+  policy, including a guard that an installer puts in front of the pod's own
+  writes. The patch now names the deny policy and its binding
+  (`runos-deny-writes`). Get and list stay cluster-wide, because Kubernetes
+  cannot limit list to a name. The in-place repair of the deny policy works
+  as before. Re-apply `deploy/relay.yaml` to take the narrower role. A test
+  in `deploy` pins the rule.
+
 ## v0.2.0
 
 This repository is now the source of rolekeeper. Before this release it was a

@@ -86,10 +86,17 @@ rules:
     resourceNames: ["runos:view", "runos:edit", "runos:secrets-read", "runos:exec", "runos:ns-admin"]
   # The deny policy and its binding: updated in place only. No create
   # (Kubernetes refuses it to the applier, and a re-created policy is blind
-  # to its list) and no delete.
+  # to its list) and no delete. The patch names the two objects, so the
+  # applier cannot change any other admission policy or binding, such as a
+  # guard that the installer puts in front of the applier's own writes.
+  # Kubernetes cannot limit list to a name, so get and list stay wide.
   - apiGroups: ["admissionregistration.k8s.io"]
     resources: ["validatingadmissionpolicies", "validatingadmissionpolicybindings"]
-    verbs: ["get", "list", "patch"]
+    verbs: ["get", "list"]
+  - apiGroups: ["admissionregistration.k8s.io"]
+    resources: ["validatingadmissionpolicies", "validatingadmissionpolicybindings"]
+    verbs: ["patch"]
+    resourceNames: ["runos-deny-writes"]
   - apiGroups: [""]
     resources: ["namespaces"]
     verbs: ["get", "list", "patch"]
